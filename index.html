@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#7070a2"><title>CSS Photo Club — Four good moments.</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg"><link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="CSS Photo Club home"><span class="logo-crop"><img src="assets/css-logo.png" alt="Computer Science Society"></span><span>CSS PHOTO CLUB<small>UNIVERSITY OF NOTTINGHAM</small></span></a>
+    <span class="fair-label">CLUBS & SOCIETIES FAIR <b>✳</b></span>
+  </header>
+  <main>
+    <nav class="journey" aria-label="Photo booth steps">
+      <button id="step-camera" class="current" aria-current="step" data-step="1"><b>01</b><span>Take 8 photos</span></button><i>→</i>
+      <button id="step-choose" data-step="2"><b>02</b><span>Pick your 4</span></button><i>→</i>
+      <button id="step-frame" data-step="3"><b>03</b><span>Your strip</span></button><i>→</i>
+      <button id="step-strip" data-step="4"><b>04</b><span>Save your strip</span></button>
+    </nav>
+    <div id="notice" class="notice hidden" role="status"></div>
+    <section id="capture-view">
+      <div class="page-heading"><div><p class="eyebrow">THE CSS FOUR-CUT PHOTO BOOTH / 인생네컷</p><h1>Four frames.<br><em>One good memory.</em></h1></div><p class="heading-note">Grab your people.<br>We’ll take eight. You keep four.</p></div>
+      <div class="capture-layout"><div>
+        <div class="camera-window"><div class="window-bar"><span>css_photo_club.exe</span><span aria-hidden="true">■ ■ ■</span></div>
+          <div class="camera-stage" id="camera-stage">
+            <canvas id="scene" width="1280" height="960" aria-label="Live photo booth camera"></canvas>
+            <div class="camera-brands" aria-hidden="true"><img src="assets/nottingham-logo.png" alt=""><span class="camera-css"><img src="assets/css-logo.png" alt=""></span></div>
+            <div class="welcome" id="welcome"><span class="welcome-star" aria-hidden="true">✳</span><h2>Your people.<br>Your little keepsake.</h2><p>Step in. Get close. Make a face.</p><button class="button mint" id="camera-button">Open the camera <span>↗</span></button><button class="text-button light" id="demo-button">Try the booth without a camera →</button></div>
+            <div id="shot-countdown" class="shot-countdown hidden" aria-live="off"><small id="shot-label">PHOTO 01 / 08</small><strong id="countdown-number">3</strong><span>A different pose each time.</span></div>
+            <div id="shutter-flash" class="shutter-flash" aria-hidden="true"></div>
+          </div>
+          <div class="camera-caption"><span id="camera-status" role="status">CAMERA OFF</span><span>8 SHOTS / 4 FAVOURITES</span></div>
+        </div>
+        <div class="capture-actions"><button class="button purple" id="start-button" disabled>Start my 8 photos <span>↗</span></button><button class="text-button hidden" id="cancel-button">Cancel this round</button><small id="capture-help">Three seconds to pose before each photo.</small></div>
+        <div class="shot-progress" id="shot-progress" aria-label="Photos taken"></div>
+      </div><aside class="booth-note"><div class="note-tag">A LITTLE BIT OF US</div><div class="mini-strip" aria-hidden="true"><div>☺ ☺</div><div>✌ ☺</div><div>☺ ♡</div><div>✳ ☺</div><b>CSS / PHOTO CLUB</b></div><h2>Different poses.<br>Same good people.</h2><p>Eight chances to be yourselves.<br>Pick the four that feel most like you.</p><span class="note-star" aria-hidden="true">✳</span><div class="note-footer">WE DON'T CODE, WE BUILD</div></aside></div>
+    </section>
+    <section id="choose-view" class="hidden">
+      <div class="page-heading"><div><p class="eyebrow">THE CAMERA ROLL / YOUR BEST BITS</p><h1>Pick your<br><em>favourite four.</em></h1></div><p class="heading-note">Tap to select. Tap again to swap.<br>Your picking order is the strip order.</p></div>
+      <div class="selection-heading"><span id="selection-count" role="status">0 of 4 selected</span><button class="text-button" id="retake-button">↺ Retake all 8</button></div>
+      <div id="empty-photos" class="empty-photos hidden"><span aria-hidden="true">✳</span><h2>Your camera roll is waiting.</h2><p>Take some photos first. You can still look around the other steps.</p><button class="button mint" id="go-camera-button">Go to the camera <span>↗</span></button></div>
+      <div class="photo-grid" id="photo-grid" aria-label="Choose your four favourite photos"></div>
+      <p class="keyboard-note">Keys 1–8 to pick · Enter to see your strip.</p>
+      <div class="flow-actions photo-actions"><p id="selection-help" role="status">Pick four photos to save a strip.</p><button class="button purple" id="view-strip-button">Next: see my strip <span>→</span></button></div>
+    </section>
+    <section id="result-view" class="hidden">
+      <div class="page-heading"><div><p class="eyebrow">A SOUVENIR FROM THE CSS PHOTO CLUB</p><h1 id="strip-heading">Save your<br><em>little keepsake.</em></h1></div></div>
+      <div class="save-layout">
+        <div class="strip-display"><canvas id="strip-preview" width="1000" height="3136" aria-label="Live preview of your four-photo strip"></canvas></div>
+        <div class="save-copy" id="save-controls"><p class="eyebrow">WE DON'T CODE, WE BUILD</p><h2>Four moments.<br>Make them yours.</h2><p>Change the design right here.<br>Same photos. One big preview.</p>
+          <div class="design-switcher"><button id="previous-design-button" class="design-arrow" aria-label="Previous design">←</button><span id="design-count" role="status">Design 1 / 3</span><button id="next-design-button" class="design-arrow" aria-label="Next design">→</button></div>
+          <div id="design-options" class="design-options" role="group" aria-label="Photo strip designs"></div>
+          <p id="save-help" class="save-help" role="status">Choose four photos to save your strip.</p>
+          <button class="button purple hidden" id="continue-save-button">Continue to save <span>→</span></button>
+          <button class="button mint" id="download-button" disabled>Save & download PNG <span>↓</span></button><button class="button outline" id="print-button" disabled>Print my strip <span>↗</span></button>
+          <p id="archive-status" class="archive-status" role="status"></p><div class="result-links"><button class="text-button" id="edit-selection-button">← Change photos</button><button class="text-button" id="next-group-button">Next group →</button></div><small>HIGH-RES PNG · FOUR PHOTOS · ONE KEEPSAKE</small>
+        </div>
+      </div>
+      <img id="strip-result" class="print-only" alt="Your finished CSS four-photo strip">
+    </section>
+  </main>
+  <footer><span>COMPUTER SCIENCE SOCIETY</span><span>Photos stay on this laptop. No cloud. No microphone.</span><span>WE DON'T CODE, WE BUILD ↗</span></footer>
+  <video id="camera" autoplay playsinline muted hidden></video><script type="module" src="app.js"></script>
+</body>
+</html>

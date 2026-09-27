@@ -1,0 +1,10 @@
+{
+  "name": "css-photo-club",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check app.js && node --check photo-session.js && node --check photo-strip.js && node --check photo-storage.js && node --check server.mjs",
+    "test": "node --test photo-session.test.mjs photo-strip.test.mjs photo-storage.test.mjs"
+  }
+}

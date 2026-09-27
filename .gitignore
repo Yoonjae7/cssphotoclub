@@ -1,0 +1,12 @@
+vendor/
+recordings/
+photo-strips/
+.legacy-signing-backup/
+node_modules/
+.pnpm-store/
+*.download
+*-check.png
+.env
+.env.*
+!.env.example
+*.log
