@@ -1,5 +1,6 @@
 import { PhotoSession, PHOTO_COUNT, PICK_COUNT, POSE_MS, containFit } from './photo-session.js';
 import { STRIP, FRAME_DESIGNS, DEFAULT_FRAME, frameDesign, drawStrip } from './photo-strip.js';
+import { canArchiveLocally } from './photo-archive.js';
 const $ = id => document.getElementById(id);
 const session = new PhotoSession();
 const canvas = $('scene'), ctx = canvas.getContext('2d', { alpha: false }), video = $('camera');
@@ -283,12 +284,16 @@ async function makeStrip() {
     releaseResult(); state.resultBlob = blob; state.resultUrl = URL.createObjectURL(blob); state.resultKey = key;
     $('strip-result').src = state.resultUrl; session.finishBuild(); updateSaveControls();
     $('step-strip').classList.add('complete');
-    $('archive-status').textContent = 'Saving your strip on this laptop…';
     archiveStrip(blob, generation);
     return {url:state.resultUrl};
   } catch (error) { if (generation === state.generation) { session.finishBuild(false); updateSaveControls(); notice('Could not make your strip. Please try again.', true); } return null; }
 }
 async function archiveStrip(blob, generation) {
+  if (!canArchiveLocally(window.location)) {
+    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = 'Your strip is ready. Download or print to keep it on your device. No photos are uploaded.';
+    return;
+  }
+  $('archive-status').textContent = 'Saving your strip on this laptop…';
   try {
     const response = await fetch('/api/strips', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob });
     if (!response.ok) throw new Error('Local save failed');

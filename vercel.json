@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": "node build-static.mjs",
+  "outputDirectory": "dist",
+  "redirects": [
+    { "source": "/favicon.ico", "destination": "/assets/favicon.svg", "permanent": false }
+  ]
+}

@@ -12,6 +12,14 @@ node server.mjs
 
 Open http://localhost:3000.
 
+## Host on Vercel
+
+Import this repository into Vercel with the repository root as the Root Directory. The checked-in `vercel.json` selects **Other** (static hosting), runs `node build-static.mjs` and publishes only `dist/`. It overrides framework/build/output defaults; do not configure `app.js` as a Node function or add catch-all function rewrites. Browser code uses `document` and must run in the browser, not a Vercel Function.
+
+The static build includes only HTML, CSS, browser modules, logos and bundled fonts. Server code, tests, recordings, saved photos and backups are never published. Build locally with `node build-static.mjs`; `node server.mjs` still runs the original local booth with its laptop archive.
+
+On the hosted HTTPS site, webcam capture, photo selection, frame preview, PNG generation, download and printing run on the visitor's device. No photos are sent to Vercel or `/api/strips`. Hosted strips are kept through download/print only; automatic `photo-strips/` archiving is available only on the HTTP localhost booth server.
+
 ## The booth
 
 1. Open the camera and allow webcam access, or try the illustrated demo.
@@ -46,7 +54,7 @@ Shortcuts: **D** opens the demo, **Space** starts / snaps, **Escape** cancels a 
 ## Check
 
 ```powershell
-node --test photo-session.test.mjs photo-strip.test.mjs photo-storage.test.mjs
+node --test photo-session.test.mjs photo-strip.test.mjs photo-storage.test.mjs static-deployment.test.mjs
 ```
 
 The demo exercises the full eight-shot / choose-four / PNG archive flow without a webcam. Test the live webcam and printer on the booth laptop before the fair.
