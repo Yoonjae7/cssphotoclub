@@ -67,11 +67,11 @@ function header(ctx, layout, logos) {
   // A shared cream masthead keeps the original dark Nottingham wordmark legible.
   // No individual white boxes or recolouring of either supplied logo.
   ctx.fillStyle = '#faf7f0'; ctx.fillRect(0, 0, layout.width, 112);
-  if (logos.nottingham?.naturalWidth) ctx.drawImage(logos.nottingham, 43, 20, 204, 78.4);
+  if (logos.nottingham?.naturalWidth) ctx.drawImage(logos.nottingham, 43 - 204 * .1, 20 - 78.4 * .1, 204 * 1.2, 78.4 * 1.2);
   else label(ctx, 'UNIVERSITY OF NOTTINGHAM', 48, 65, 18, '#303044');
   label(ctx, 'CSS PHOTO CLUB', 546, 58, 25, '#66608c', 'center');
   label(ctx, 'FOUR GOOD MOMENTS / FOUR-CUT', 546, 83, 13, '#8c829f', 'center', false);
-  if (logos.css?.naturalWidth) ctx.drawImage(logos.css, 150, 190, 440, 430, layout.width - 133, 12, 94, 92);
+  if (logos.css?.naturalWidth) ctx.drawImage(logos.css, 150, 190, 440, 430, layout.width - 133 - 94 * .1, 12 - 92 * .1, 94 * 1.2, 92 * 1.2);
   if (layout.id === 'terminal') {
     label(ctx, 'FILE   VIEW   MEMORIES', 64, 139, 17, '#bcb4ef');
     label(ctx, '● CAMERA_ROLL / 4', 930, 139, 17, '#98e7ad', 'right');

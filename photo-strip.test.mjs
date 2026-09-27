@@ -26,6 +26,15 @@ for (const design of FRAME_DESIGNS) test(`${design.name}: renderer preserves pho
   assert.deepEqual(calls.slice(2).map(args => args[0].id), [5,1,7,0]);
   assert.equal(calls[0][0].id, 'nottingham'); assert.ok(calls[0][1] < STRIP.width / 2);
   assert.equal(calls[1][0].id, 'css'); assert.ok(calls[1][5] > STRIP.width / 2);
+  // Only logo sizes change: both grow 20% around their original centres.
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < .00001);
+  near(calls[0][3], 204 * 1.2); near(calls[0][4], 78.4 * 1.2);
+  near(calls[0][1] + calls[0][3] / 2, 43 + 204 / 2);
+  near(calls[0][2] + calls[0][4] / 2, 20 + 78.4 / 2);
+  assert.deepEqual(calls[1].slice(1, 5), [150, 190, 440, 430]);
+  near(calls[1][7], 94 * 1.2); near(calls[1][8], 92 * 1.2);
+  near(calls[1][5] + calls[1][7] / 2, STRIP.width - 133 + 94 / 2);
+  near(calls[1][6] + calls[1][8] / 2, 12 + 92 / 2);
   assert.ok(text.some(args => args[0] === 'COMPUTER SCIENCE'));
   for (const [index, args] of calls.slice(2).entries()) {
     const slot = photoSlot(index, design.id);
