@@ -253,6 +253,8 @@ function updateSaveControls() {
   $('design-count').textContent = `${frameDesign(state.design).name} / ${FRAME_DESIGNS.length}`;
   $('previous-design-button').disabled = building; $('next-design-button').disabled = building;
   const previewOnly = session.step === 3;
+  $('phone-share').classList.toggle('hidden', previewOnly || !state.shareUrl);
+  $('share-status').classList.toggle('hidden', previewOnly);
   $('continue-save-button').classList.toggle('hidden', !previewOnly);
   for (const id of ['download-button', 'download-video-button', 'print-button']) { $(id).classList.toggle('hidden', previewOnly); $(id).disabled = !session.complete || building; }
   $('download-video-button').disabled ||= Boolean(state.videoPromise && !state.videoBlob);
