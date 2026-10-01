@@ -23,14 +23,12 @@ async function temporaryOutput(run) {
   }
 }
 
-test('Vercel explicitly builds a static site, not the browser app as a Node function', async () => {
+test('Vercel builds static browser files alongside the sharing API', async () => {
   const config = JSON.parse(await readFile(new URL('./vercel.json', import.meta.url), 'utf8'));
   assert.equal(config.framework, null);
   assert.equal(config.buildCommand, 'node build-static.mjs');
   assert.equal(config.outputDirectory, 'dist');
-  assert.equal(config.functions, undefined);
   assert.equal(config.builds, undefined);
-  assert.equal(config.rewrites, undefined);
 });
 
 test('static build contains every browser dependency, no photos or server code', async () => {
@@ -44,7 +42,7 @@ test('static build contains every browser dependency, no photos or server code',
       const source = await readFile(path.join(directory, file), 'utf8');
       for (const [, dependency] of source.matchAll(/from ['"]\.\/([^'"]+)['"]/g)) assert.ok(STATIC_FILES.includes(dependency), `Missing module: ${dependency}`);
     }
-    assert.doesNotMatch((await filesIn(directory)).join('\n'), /server\.mjs|photo-storage|photo-strips|recordings|backup|\.test\./);
+    assert.doesNotMatch((await filesIn(directory)).join('\n'), /server\.mjs|photo-storage|photo-strips|share-media|recordings|backup|\.test\./);
     await buildStaticSite(directory); // Repeated builds remain deterministic.
     assert.deepEqual(await filesIn(directory), [...STATIC_FILES].sort());
   });
@@ -63,14 +61,14 @@ test('hosted sites never archive photos; HTTP loopback booth keeps local saving'
   for (const address of ['https://cssphotoclub.vercel.app', 'https://localhost', 'http://example.com', 'https://127.0.0.1', 'http://localhost.example.com', 'http://192.168.1.10', 'file:///index.html']) assert.equal(canArchiveLocally(new URL(address)), false);
 });
 
-test('hosted export returns before any photo upload, leaving PNG downloads available', async () => {
+test('hosted PNG export does not upload until the user creates a phone QR', async () => {
   const source = await readFile(new URL('./app.js', import.meta.url), 'utf8');
-  const body = source.match(/async function archiveStrip\(blob, generation\) \{([\s\S]*?)\n\}\nfunction nextGroup/)[1];
+  const body = source.match(/async function archiveStrip\(blob, generation\) \{([\s\S]*?)\n\}\nfunction drawQr/)[1];
   const invoke = new Function('canArchiveLocally', 'window', 'state', '$', 'fetch', `return async (blob, generation) => {${body}}`);
   const blob = {}, status = { textContent: '' }; let requests = 0;
   const archive = invoke(canArchiveLocally, { location: new URL('https://cssphotoclub.vercel.app') }, { generation: 1, resultBlob: blob }, () => status, () => { requests++; throw new Error('Unexpected upload'); });
   await archive(blob, 1);
   assert.equal(requests, 0);
-  assert.match(status.textContent, /No photos are uploaded/);
+  assert.match(status.textContent, /create a QR link/);
   assert.match(source, /link.download = `css-four-cut-/);
 });

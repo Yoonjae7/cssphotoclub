@@ -1,6 +1,6 @@
-vendor/
 recordings/
 photo-strips/
+share-media/
 .legacy-signing-backup/
 node_modules/
 .pnpm-store/
