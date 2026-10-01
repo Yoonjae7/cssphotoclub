@@ -23,7 +23,7 @@ async function temporaryOutput(run) {
   }
 }
 
-test('Vercel builds static browser files alongside the sharing API', async () => {
+test('Vercel builds static browser files without a hosted sharing API', async () => {
   const config = JSON.parse(await readFile(new URL('./vercel.json', import.meta.url), 'utf8'));
   assert.equal(config.framework, null);
   assert.equal(config.buildCommand, 'node build-static.mjs');
@@ -61,14 +61,19 @@ test('hosted sites never archive photos; HTTP loopback booth keeps local saving'
   for (const address of ['https://cssphotoclub.vercel.app', 'https://localhost', 'http://example.com', 'https://127.0.0.1', 'http://localhost.example.com', 'http://192.168.1.10', 'file:///index.html']) assert.equal(canArchiveLocally(new URL(address)), false);
 });
 
-test('hosted PNG export does not upload until the user creates a phone QR', async () => {
+test('hosted PNG export asks the booth laptop to save a permanent picture', async () => {
   const source = await readFile(new URL('./app.js', import.meta.url), 'utf8');
   const body = source.match(/async function archiveStrip\(blob, generation\) \{([\s\S]*?)\n\}\nfunction drawQr/)[1];
-  const invoke = new Function('canArchiveLocally', 'window', 'state', '$', 'fetch', `return async (blob, generation) => {${body}}`);
+  const invoke = new Function('boothApi', 'state', '$', 'fetch', `return async (blob, generation) => {${body}}`);
   const blob = {}, status = { textContent: '' }; let requests = 0;
-  const archive = invoke(canArchiveLocally, { location: new URL('https://cssphotoclub.vercel.app') }, { generation: 1, resultBlob: blob }, () => status, () => { requests++; throw new Error('Unexpected upload'); });
+  const archive = invoke(() => 'http://127.0.0.1:3000', { generation: 1, resultBlob: blob }, () => status, async (url, options) => {
+    requests++;
+    assert.equal(url, 'http://127.0.0.1:3000/api/strips');
+    assert.equal(options.body, blob);
+    return { ok: true, json: async () => ({ filename: 'saved.png' }) };
+  });
   await archive(blob, 1);
-  assert.equal(requests, 0);
-  assert.match(status.textContent, /create a QR link/);
+  assert.equal(requests, 1);
+  assert.match(status.textContent, /Saved in Downloads\/cssbooth\/picture/);
   assert.match(source, /link.download = `css-four-cut-/);
 });

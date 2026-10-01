@@ -31,8 +31,10 @@ test('local API saves PNG, rejects cross-origin writes and protects old backups'
     await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
     const saved = await fetch(base+'/api/strips',{method:'POST',headers:{'Content-Type':'image/png'},body:fixture()});
-    assert.equal(saved.status,201); const result = await saved.json();
-    const png = await fetch(base+result.url); assert.equal(png.headers.get('content-type'),'image/png'); assert.deepEqual(Buffer.from(await png.arrayBuffer()),fixture());
+    assert.equal(saved.status,201); assert.deepEqual(await saved.json(), { saved: true });
+    const archive = path.join(directory, 'cssbooth', 'picture');
+    const [filename] = await readdir(archive);
+    assert.deepEqual(await readFile(path.join(archive, filename)), fixture());
     assert.equal((await fetch(base+'/api/strips',{method:'POST',headers:{'Content-Type':'video/webm'},body:'video'})).status,415);
     assert.equal((await fetch(base+'/api/strips',{method:'POST',headers:{'Content-Type':'image/png',Origin:'https://example.com'},body:fixture()})).status,403);
     assert.equal((await fetch(base+'/api/strips',{method:'POST',headers:{'Content-Type':'image/png'},body:'bad'})).status,400);

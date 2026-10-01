@@ -53,7 +53,7 @@
           <p id="save-help" class="save-help" role="status">Choose four photos to save your strip.</p>
           <button class="button purple hidden" id="continue-save-button">Continue to save <span>→</span></button>
           <button class="button mint" id="download-button" disabled>Save & download PNG <span>↓</span></button><button class="button outline" id="print-button" disabled>Print my strip <span>↗</span></button>
-          <div id="share-key-wrap" class="share-key-wrap hidden"><label for="share-key">Booth sharing key</label><input id="share-key" type="password" autocomplete="off" placeholder="Enter once per browser session"><small>Ask the booth operator for the key configured on Vercel.</small></div>
+          <div id="booth-server-wrap" class="booth-server-wrap hidden"><label for="booth-server-url">Booth laptop server</label><input id="booth-server-url" type="url" inputmode="url" spellcheck="false" value="http://127.0.0.1:3000"><button class="text-button" id="check-booth-server">Check connection</button><small id="booth-server-status" role="status">Run <code>node server.mjs</code> on this laptop, then allow the browser’s local network prompt.</small></div>
           <button class="button purple" id="share-button" disabled>Create phone QR <span>▦</span></button>
           <div id="phone-share" class="phone-share hidden"><h3>Scan to save on your phone</h3><canvas id="share-qr" role="img" aria-label="QR code for your photo and video download page"></canvas><a id="share-link" target="_blank" rel="noopener noreferrer"></a></div>
           <p id="share-status" class="share-status" role="status"></p>
@@ -63,7 +63,7 @@
       <img id="strip-result" class="print-only" alt="Your finished CSS four-photo strip">
     </section>
   </main>
-  <footer><span>COMPUTER SCIENCE SOCIETY</span><span>Phone sharing uploads the selected strip and video. No microphone.</span><span>WE DON'T CODE, WE BUILD ↗</span></footer>
+  <footer><span>COMPUTER SCIENCE SOCIETY</span><span>Phone links last five minutes. Files stay on the booth laptop. No microphone.</span><span>WE DON'T CODE, WE BUILD ↗</span></footer>
   <video id="camera" autoplay playsinline muted hidden></video><script type="module" src="app.js"></script>
 </body>
 </html>

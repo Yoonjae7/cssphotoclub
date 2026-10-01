@@ -6,7 +6,15 @@ import qrcode from './vendor/qrcode.mjs';
 const $ = id => document.getElementById(id);
 const session = new PhotoSession();
 const canvas = $('scene'), ctx = canvas.getContext('2d', { alpha: false }), video = $('camera');
-const state = { mode: 'off', view: 'capture', design: DEFAULT_FRAME, stream: null, opening: false, timer: null, deadline: 0, generation: 0, previewRevision: 0, resultUrl: null, resultBlob: null, resultKey: null, shareId: null, shareUrl: null, shareBusy: false, shareVideoReady: false, shareRevision: 0 };
+const state = { mode: 'off', view: 'capture', design: DEFAULT_FRAME, stream: null, opening: false, timer: null, deadline: 0, generation: 0, previewRevision: 0, resultUrl: null, resultBlob: null, resultKey: null, shareId: null, shareUrl: null, shareBusy: false, shareVideoReady: false, shareRevision: 0, shareExpiryTimer: null };
+function boothApi() {
+  if (canArchiveLocally(window.location)) return '';
+  const url = new URL($('booth-server-url').value.trim() || 'http://127.0.0.1:3000');
+  if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('The booth server address must be http://127.0.0.1 with its port.');
+  }
+  return url.origin;
+}
 const logos = { css: new Image(), nottingham: new Image() };
 logos.css.src = 'assets/css-logo.png'; logos.nottingham.src = 'assets/nottingham-logo.png';
 const assetsReady = Promise.all(Object.values(logos).map(image => image.decode().catch(() => {}))).then(() => document.fonts.ready);
@@ -268,6 +276,7 @@ async function updatePreview() {
 }
 function releaseResult() {
   if (state.resultUrl) URL.revokeObjectURL(state.resultUrl);
+  clearTimeout(state.shareExpiryTimer); state.shareExpiryTimer = null;
   state.resultUrl = null; state.resultBlob = null; state.resultKey = null; $('strip-result').removeAttribute('src'); $('archive-status').textContent = '';
   state.shareRevision++; state.shareId = null; state.shareUrl = null; state.shareBusy = false; state.shareVideoReady = false;
   $('phone-share').classList.add('hidden'); $('share-status').textContent = '';
@@ -296,18 +305,14 @@ async function makeStrip() {
   } catch (error) { if (generation === state.generation) { session.finishBuild(false); updateSaveControls(); notice('Could not make your strip. Please try again.', true); } return null; }
 }
 async function archiveStrip(blob, generation) {
-  if (!canArchiveLocally(window.location)) {
-    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = 'Your strip is ready. Download it here, or create a QR link for your phone.';
-    return;
-  }
-  $('archive-status').textContent = 'Saving your strip on this laptop…';
+  $('archive-status').textContent = 'Saving your strip to Downloads/cssbooth/picture…';
   try {
-    const response = await fetch('/api/strips', { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob });
-    if (!response.ok) throw new Error('Local save failed');
+    const response = await fetch(`${boothApi()}/api/strips`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob, targetAddressSpace: 'loopback' });
+    if (!response.ok) throw new Error(`Local save failed (${response.status})`);
     await response.json();
-    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = '✓ Saved on this laptop in the photo-strips folder.';
+    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = '✓ Saved in Downloads/cssbooth/picture on the booth laptop.';
   } catch {
-    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = 'Local save unavailable. Use Download photo strip to keep it.';
+    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = 'Could not save locally. Start the booth server, then download this strip to keep a copy.';
   }
 }
 function drawQr(url) {
@@ -321,24 +326,9 @@ function drawQr(url) {
     if (code.isDark(row, column)) qrContext.fillRect((column + quiet) * cell, (row + quiet) * cell, cell, cell);
   }
 }
-async function phonePhoto() {
-  await $('strip-result').decode();
-  const image = $('strip-result');
-  const canvas = document.createElement('canvas'); canvas.width = STRIP.width; canvas.height = STRIP.height;
-  for (const width of [STRIP.width, 800]) {
-    canvas.width = width; canvas.height = Math.round(STRIP.height * width / STRIP.width);
-    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-    for (const quality of [.88, .78, .67, .55]) {
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
-      if (blob && blob.size <= 4_000_000) return blob;
-    }
-  }
-  throw new Error('This strip is too large to share. Please download it on this device.');
-}
-async function postMedia(url, blob, key) {
+async function postMedia(url, blob) {
   const headers = { 'Content-Type': blob.type };
-  if (key) headers['x-booth-upload-key'] = key;
-  const response = await fetch(url, { method: 'POST', headers, body: blob });
+  const response = await fetch(url, { method: 'POST', headers, body: blob, targetAddressSpace: 'loopback' });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || `Upload failed (${response.status})`);
   return result;
@@ -347,20 +337,21 @@ async function createPhoneShare() {
   if (state.shareBusy || !session.complete) return;
   const result = await makeStrip();
   if (!result) return;
-  const hosted = !canArchiveLocally(window.location);
-  const key = hosted ? $('share-key').value.trim() : '';
-  if (hosted && !key) { $('share-status').textContent = 'Enter the booth sharing key to create a phone QR.'; $('share-key').focus(); return; }
-  if (hosted) sessionStorage.setItem('boothUploadKey', key);
   const generation = state.generation, revision = state.shareRevision, selected = [...session.chosen];
   const active = () => generation === state.generation && revision === state.shareRevision && state.view === 'result';
   state.shareBusy = true; $('share-status').textContent = state.shareUrl ? 'Retrying your video…' : 'Uploading your photo…'; updateSaveControls();
   try {
     if (!state.shareUrl) {
-      const photo = hosted ? await phonePhoto() : state.resultBlob;
+      const photo = state.resultBlob;
       if (!active()) return;
-      const share = await postMedia(hosted ? '/api/share?kind=photo' : '/api/shares', photo, key);
+      const share = await postMedia(`${boothApi()}/api/shares`, photo);
       if (!active()) return;
       state.shareId = share.id; state.shareUrl = share.shareUrl;
+      state.shareExpiryTimer = setTimeout(() => {
+        if (!active()) return;
+        state.generation++; releaseResult(); session.reset(); eraseActivePhotos(); state.design = DEFAULT_FRAME;
+        showView('capture'); updateCapture(); notice('The five-minute QR expired. The booth laptop keeps its saved picture and video.');
+      }, Math.max(1, share.expiresAt - Date.now()));
       drawQr(share.shareUrl);
       $('share-link').href = share.shareUrl; $('share-link').textContent = share.shareUrl;
       $('phone-share').classList.remove('hidden');
@@ -370,12 +361,11 @@ async function createPhoneShare() {
     const photos = await Promise.all(selected.map(loadPhoto));
     const videoBlob = await makePhotoVideo(photos);
     if (!active()) return;
-    if (videoBlob.size > 4_000_000 && hosted) throw new Error('Video is too large to upload. The photo QR still works.');
     $('share-status').textContent = 'Photo QR ready. Uploading your video…';
-    await postMedia(hosted ? `/api/share?kind=video&id=${state.shareId}` : `/api/shares/${state.shareId}/video`, videoBlob, key);
+    await postMedia(`${boothApi()}/api/shares/${state.shareId}/video`, videoBlob);
     if (active()) { state.shareVideoReady = true; $('share-status').textContent = '✓ Photo and video are ready. Scan the QR with your phone.'; }
   } catch (error) {
-    if (active()) $('share-status').textContent = state.shareUrl ? `Photo QR ready. Video unavailable: ${error.message}` : `Could not create QR: ${error.message}`;
+    if (active()) $('share-status').textContent = state.shareUrl ? `Photo QR ready. Video unavailable: ${error.message}` : `Could not connect to the booth laptop: ${error.message}. Start the local server and check its address.`;
   } finally { if (active()) { state.shareBusy = false; updateSaveControls(); } }
 }
 function nextGroup() {
@@ -426,7 +416,16 @@ document.addEventListener('keydown', event => {
 document.addEventListener('visibilitychange', () => { if (document.hidden && inRound()) { navigateStep(1); notice('The round is paused. Continue your photos when you return.'); } });
 window.addEventListener('beforeunload', () => { stopTimer(); state.stream?.getTracks().forEach(track => track.stop()); if (state.resultUrl) URL.revokeObjectURL(state.resultUrl); });
 if (!canArchiveLocally(window.location)) {
-  $('share-key-wrap').classList.remove('hidden');
-  $('share-key').value = sessionStorage.getItem('boothUploadKey') || '';
+  $('booth-server-wrap').classList.remove('hidden');
+  $('booth-server-url').value = localStorage.getItem('boothServerUrl') || 'http://127.0.0.1:3000';
+  $('booth-server-url').addEventListener('change', () => localStorage.setItem('boothServerUrl', $('booth-server-url').value.trim()));
+  $('check-booth-server').addEventListener('click', async () => {
+    $('booth-server-status').textContent = 'Connecting to the booth laptop…';
+    try {
+      const response = await fetch(`${boothApi()}/api/health`, { cache: 'no-store', targetAddressSpace: 'loopback' });
+      if (!response.ok) throw new Error(`Server responded ${response.status}`);
+      $('booth-server-status').textContent = '✓ Booth laptop connected. Pictures and videos will be saved locally.';
+    } catch { $('booth-server-status').textContent = 'Could not connect. Start the server and set BOOTH_SITE_ORIGIN to this website’s address.'; }
+  });
 }
 createDesignOptions(); showView('capture'); updateCapture(); requestAnimationFrame(frame);

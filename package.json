@@ -2,13 +2,10 @@
   "name": "css-photo-club",
   "private": true,
   "type": "module",
-  "dependencies": {
-    "@vercel/blob": "^2.8.0"
-  },
   "scripts": {
     "start": "node server.mjs",
     "build": "node build-static.mjs",
-    "check": "node --check app.js && node --check photo-session.js && node --check photo-strip.js && node --check photo-storage.js && node --check share-storage.js && node --check video-export.js && node --check api/share.js && node --check server.mjs",
+    "check": "node --check app.js && node --check photo-session.js && node --check photo-strip.js && node --check photo-storage.js && node --check share-storage.js && node --check video-export.js && node --check server.mjs",
     "test": "node --test *.test.mjs"
   }
 }
