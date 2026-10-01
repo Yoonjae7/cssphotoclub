@@ -32,7 +32,7 @@ test('local API saves PNG, rejects cross-origin writes and protects old backups'
     const base = `http://127.0.0.1:${server.address().port}`;
     const saved = await fetch(base+'/api/strips',{method:'POST',headers:{'Content-Type':'image/png'},body:fixture()});
     assert.equal(saved.status,201); assert.deepEqual(await saved.json(), { saved: true });
-    const archive = path.join(directory, 'cssbooth', 'picture');
+    const archive = path.join(directory, 'cssbooth', 'photo');
     const [filename] = await readdir(archive);
     assert.deepEqual(await readFile(path.join(archive, filename)), fixture());
     assert.equal((await fetch(base+'/api/strips',{method:'POST',headers:{'Content-Type':'video/webm'},body:'video'})).status,415);

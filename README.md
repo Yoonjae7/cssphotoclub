@@ -34,7 +34,7 @@ On the hosted HTTPS site, webcam capture, photo selection, preview, PNG generati
 
 The video is a silent, roughly seven-second slideshow. The QR starts its five-minute clock when the photo is saved. After five minutes the local server rejects the link and removes its temporary photo/video copies; it also removes expired copies after a restart. Keep the server running for timely deletion. Anyone with the unguessable QR link can download during those five minutes. Files a visitor has already downloaded to a phone cannot be recalled.
 
-The laptop keeps the finished PNG in `~/Downloads/cssbooth/picture/` and the slideshow in `~/Downloads/cssbooth/video/`; these **do not expire**. On Windows, `~` means the current user's profile directory. If the laptop has multiple network interfaces, set `BOOTH_PUBLIC_URL=http://LAPTOP-LAN-IP:3000` before starting the server. `BOOTH_ARCHIVE_DIR` can override the archive's `cssbooth` folder. Temporary QR files live in `share-media/` and are removed on expiry. Existing files previously uploaded to Vercel Blob under the old version require manual removal from that store.
+The laptop keeps the finished PNG in `~/Downloads/cssbooth/photo/` and the slideshow in `~/Downloads/cssbooth/video/`; these **do not expire**. On Windows, `~` means the current user's profile directory. If the laptop has multiple network interfaces, set `BOOTH_PUBLIC_URL=http://LAPTOP-LAN-IP:3000` before starting the server. `BOOTH_ARCHIVE_DIR` can override the archive's `cssbooth` folder. Temporary QR files live in `share-media/` and are removed on expiry. Existing files previously uploaded to Vercel Blob under the old version require manual removal from that store.
 
 ## The booth
 
@@ -60,7 +60,7 @@ Camera images are mirrored and fitted without cropping or magnification. If the 
 
 - No microphone. Camera capture and strip generation stay in the browser. The finished strip and silent video go only to the booth laptop's local server.
 - Raw shots exist only in memory for the current round. No browser photo history is stored.
-- Finished strips are saved in `~/Downloads/cssbooth/picture/` when generated, and slideshow videos in `~/Downloads/cssbooth/video/` when shared. Phone sharing stores temporary copies in `share-media/` for five minutes. A browser PNG download still works if the local server is unavailable, but it will not be saved in `cssbooth` until the server is running.
+- Finished strips are saved in `~/Downloads/cssbooth/photo/` when generated, and slideshow videos in `~/Downloads/cssbooth/video/` when shared. Phone sharing stores temporary copies in `share-media/` for five minutes. A browser PNG download still works if the local server is unavailable, but it will not be saved in `cssbooth` until the server is running.
 - Retaking / next group clears the active shots, not saved strips. Cancel discards the active round. Hiding the tab pauses capture and keeps the shots.
 - Existing `recordings/` and previous autograph browser data are untouched. The retired signing source has a recoverable copy in `.legacy-signing-backup/`, not served by the app. Old binary caches are not loaded.
 - Printing opens the browser print dialog; choose your printer / paper size there.

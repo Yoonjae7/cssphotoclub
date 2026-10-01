@@ -73,7 +73,7 @@ test('local QR link serves a phone page with photo and video downloads', async (
     const movie = await fetch(`${base}/api/shares/${share.id}/video`);
     assert.equal(movie.headers.get('content-type'), 'video/webm');
     assert.deepEqual(Buffer.from(await movie.arrayBuffer()), video);
-    assert.equal((await readdir(path.join(root, 'cssbooth', 'picture'))).length, 1);
+    assert.equal((await readdir(path.join(root, 'cssbooth', 'photo'))).length, 1);
     assert.equal((await readdir(path.join(root, 'cssbooth', 'video'))).length, 1);
     assert.equal((await fetch(`${base}/share/../bad`)).status, 403);
     assert.equal((await fetch(`${base}/share-media/${share.id}/photo.png`)).status, 403);
@@ -85,7 +85,7 @@ test('local QR link serves a phone page with photo and video downloads', async (
   }
 });
 
-test('QR copies expire while the laptop picture archive remains', async () => {
+test('QR copies expire while the laptop photo archive remains', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'css-share-expiry-test-'));
   const mediaRoot = path.join(root, 'share-media');
   const archiveRoot = path.join(root, 'cssbooth');
@@ -99,7 +99,7 @@ test('QR copies expire while the laptop picture archive remains', async () => {
     await new Promise(resolve => setTimeout(resolve, 1100));
     assert.equal((await fetch(`${base}/share/${share.id}`)).status, 404);
     await assert.rejects(readdir(path.join(mediaRoot, share.id)), { code: 'ENOENT' });
-    assert.deepEqual(await readFile(path.join(archiveRoot, 'picture', filename)), png());
+    assert.deepEqual(await readFile(path.join(archiveRoot, 'photo', filename)), png());
   } finally {
     await new Promise(resolve => server.close(resolve));
     await rm(root, { recursive: true, force: true });

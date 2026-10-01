@@ -74,6 +74,6 @@ test('hosted PNG export asks the booth laptop to save a permanent picture', asyn
   });
   await archive(blob, 1);
   assert.equal(requests, 1);
-  assert.match(status.textContent, /Saved in Downloads\/cssbooth\/picture/);
+  assert.match(status.textContent, /Saved in Downloads\/cssbooth\/photo/);
   assert.match(source, /link.download = `css-four-cut-/);
 });

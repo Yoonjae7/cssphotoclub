@@ -73,7 +73,7 @@ async function archiveFile(buffer, directory, extension) {
 
 export async function archivePicture(buffer, archiveRoot) {
   if (!validStripPng(buffer)) throw new Error('Expected a complete four-cut PNG');
-  return archiveFile(buffer, path.join(archiveRoot, 'picture'), 'png');
+  return archiveFile(buffer, path.join(archiveRoot, 'photo'), 'png');
 }
 
 export async function archiveVideo(type, buffer, archiveRoot) {

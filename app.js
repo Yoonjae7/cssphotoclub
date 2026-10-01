@@ -305,12 +305,12 @@ async function makeStrip() {
   } catch (error) { if (generation === state.generation) { session.finishBuild(false); updateSaveControls(); notice('Could not make your strip. Please try again.', true); } return null; }
 }
 async function archiveStrip(blob, generation) {
-  $('archive-status').textContent = 'Saving your strip to Downloads/cssbooth/picture…';
+  $('archive-status').textContent = 'Saving your strip to Downloads/cssbooth/photo…';
   try {
     const response = await fetch(`${boothApi()}/api/strips`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob, targetAddressSpace: 'loopback' });
     if (!response.ok) throw new Error(`Local save failed (${response.status})`);
     await response.json();
-    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = '✓ Saved in Downloads/cssbooth/picture on the booth laptop.';
+    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = '✓ Saved in Downloads/cssbooth/photo on the booth laptop.';
   } catch {
     if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = 'Could not save locally. Start the booth server, then download this strip to keep a copy.';
   }
