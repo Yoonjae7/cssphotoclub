@@ -68,14 +68,11 @@ test('different-aspect photos are contained within every design', () => {
     });
   }
 });
-test('capture and PNG export remain separate from the optional slideshow video', async () => {
+test('capture and PNG export remain available with moving strip video', async () => {
   const source = await readFile(new URL('./app.js', import.meta.url), 'utf8');
-  const video = await readFile(new URL('./video-export.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /new Worker|penContact|drawStrokes/);
   assert.match(source, /canvas.toDataURL\('image\/jpeg', .95\)/);
   assert.match(source, /strip.toBlob\(resolve, 'image\/png'\)/);
-  assert.match(video, /new MediaRecorder\(stream/);
-  assert.match(video, /SHOT_MS \* 4/);
 });
 
 test('design controls live on the save screen, with four always-available step buttons', async () => {

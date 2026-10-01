@@ -1,13 +1,14 @@
 import { PhotoSession, PHOTO_COUNT, PICK_COUNT, POSE_MS, containFit } from './photo-session.js';
 import { STRIP, FRAME_DESIGNS, DEFAULT_FRAME, frameDesign, drawStrip } from './photo-strip.js';
 import { canMakeVideo, makePhotoVideo } from './video-export.js';
+import { startSceneClip, MIN_CLIP_MS } from './clip-capture.js';
 import { shareFiles } from './phone-share.js';
 import { chooseArchive, restoreArchive, saveToArchive } from './local-archive.js';
 import qrcode from './vendor/qrcode.mjs';
 const $ = id => document.getElementById(id);
 const session = new PhotoSession();
 const canvas = $('scene'), ctx = canvas.getContext('2d', { alpha: false }), video = $('camera');
-const state = { mode: 'off', view: 'capture', design: DEFAULT_FRAME, stream: null, opening: false, timer: null, deadline: 0, generation: 0, previewRevision: 0, resultUrl: null, resultBlob: null, resultKey: null, videoBlob: null, videoPromise: null, photoArchived: false, videoArchived: false, shareUrl: null, shareBusy: false, shareRevision: 0, shareExpiryTimer: null, shareClock: null, autoShareTimer: null };
+const state = { clips: [], clipRecorder: null, mode: 'off', view: 'capture', design: DEFAULT_FRAME, stream: null, opening: false, timer: null, deadline: 0, generation: 0, previewRevision: 0, resultUrl: null, resultBlob: null, resultKey: null, videoBlob: null, videoPromise: null, photoArchived: false, videoArchived: false, shareUrl: null, shareBusy: false, shareRevision: 0, shareExpiryTimer: null, shareClock: null, autoShareTimer: null };
 const logos = { css: new Image(), nottingham: new Image() };
 logos.css.src = 'assets/css-logo.png'; logos.nottingham.src = 'assets/nottingham-logo.png';
 const assetsReady = Promise.all(Object.values(logos).map(image => image.decode().catch(() => {}))).then(() => document.fonts.ready);
@@ -18,7 +19,9 @@ function notice(message = '', error = false) {
 }
 function inRound() { return ['capturing', 'between'].includes(session.phase); }
 function stopTimer() { clearTimeout(state.timer); state.timer = null; }
+function cancelSceneClip() { state.clipRecorder?.cancel(); state.clipRecorder = null; }
 function eraseActivePhotos() {
+  cancelSceneClip(); state.clips = [];
   state.previewRevision++; photoImages.clear(); $('photo-grid').replaceChildren();
   $('strip-preview').getContext('2d').clearRect(0, 0, STRIP.width, STRIP.height);
 }
@@ -36,7 +39,7 @@ function showView(view) {
 }
 function navigateStep(step) {
   if (!Number.isInteger(step) || step < 1 || step > 4) return;
-  stopTimer(); state.previewRevision++;
+  stopTimer(); cancelSceneClip(); state.previewRevision++;
   if (session.phase === 'building') state.generation++;
   session.navigate(step); $('shutter-flash').classList.remove('active'); notice();
   if (step === 1) { showView('capture'); updateCapture(); }
@@ -48,7 +51,8 @@ function navigateStep(step) {
   }
 }
 function updateCapture() {
-  $('start-button').disabled = state.mode === 'off' || state.opening || session.phase === 'between';
+  const warmingClip = session.phase === 'capturing' && state.clipRecorder && performance.now() - state.clipRecorder.startedAt < MIN_CLIP_MS;
+  $('start-button').disabled = state.mode === 'off' || state.opening || session.phase === 'between' || Boolean(warmingClip);
   $('start-button').innerHTML = session.phase === 'capturing' ? 'Take photo now <span>↗</span>' : session.phase === 'between' ? 'Nice! Next pose…' : session.phase === 'paused' ? 'Continue my photos <span>↗</span>' : 'Start my 8 photos <span>↗</span>';
   $('cancel-button').classList.toggle('hidden', !inRound());
   $('shot-countdown').classList.toggle('hidden', session.phase !== 'capturing');
@@ -148,11 +152,15 @@ function drawScene(now) {
 function frame(now) {
   if (state.view === 'capture') {
     drawScene(now);
-    if (session.phase === 'capturing') $('countdown-number').textContent = String(Math.max(1, Math.ceil((state.deadline - now) / 1000)));
+    if (session.phase === 'capturing') {
+      $('countdown-number').textContent = String(Math.max(1, Math.ceil((state.deadline - now) / 1000)));
+      if (state.clipRecorder && $('start-button').disabled && now - state.clipRecorder.startedAt >= MIN_CLIP_MS) updateCapture();
+    }
   }
   requestAnimationFrame(frame);
 }
 function countdown() {
+  cancelSceneClip(); drawScene(performance.now()); state.clipRecorder = startSceneClip(canvas);
   stopTimer(); state.deadline = performance.now() + POSE_MS;
   $('shot-label').textContent = `PHOTO ${String(session.photos.length + 1).padStart(2, '0')} / 08`;
   $('countdown-number').textContent = '3'; updateCapture();
@@ -169,11 +177,15 @@ function startRound() {
 function takePhoto() {
   if (session.phase !== 'capturing') return;
   stopTimer();
+  if (state.clipRecorder && performance.now() - state.clipRecorder.startedAt < MIN_CLIP_MS) {
+    state.timer = setTimeout(takePhoto, MIN_CLIP_MS - (performance.now() - state.clipRecorder.startedAt)); return;
+  }
   if (state.mode === 'camera' && (video.readyState < 2 || !video.videoWidth || !video.videoHeight)) return cancelRound('The camera image is not ready. Please try another round.');
   try {
     // Only the clean scene is saved: countdown, flash and screen controls are DOM overlays.
     drawScene(performance.now());
     if (!session.capture(canvas.toDataURL('image/jpeg', .95))) return;
+    state.clips.push(state.clipRecorder?.finish() || Promise.resolve(null)); state.clipRecorder = null;
     $('shutter-flash').classList.remove('active'); void $('shutter-flash').offsetWidth; $('shutter-flash').classList.add('active');
     updateCapture();
     if (session.phase === 'choosing') { navigateStep(2); return; }
@@ -322,12 +334,15 @@ async function ensureVideo() {
   if (state.videoBlob) return state.videoBlob;
   if (state.videoPromise) return state.videoPromise;
   if (!canMakeVideo()) throw new Error('MP4 creation needs a current Chrome or Edge browser. Your photo download is still available.');
-  const generation = state.generation, revision = state.shareRevision, photos = [...session.chosen], filename = archiveFilename('mp4');
+  const generation = state.generation, revision = state.shareRevision, clips = session.selected.map(index => state.clips[index]), filename = archiveFilename('mp4');
+  const stripOptions = { logos, date: session.date, demo: state.mode === 'demo', design: state.design };
   const active = () => generation === state.generation && revision === state.shareRevision;
   const promise = (async () => {
-    const images = await Promise.all(photos.map(loadPhoto));
+    const recorded = await Promise.all(clips);
     if (!active()) throw new Error('Cancelled');
-    const blob = await makePhotoVideo(images, { active });
+    const blob = await makePhotoVideo(recorded, { ...stripOptions, active, progress: percent => {
+      if (active() && state.shareBusy) $('share-status').textContent = `Making your moving strip… ${percent}%`;
+    } });
     if (!active()) throw new Error('Cancelled');
     state.videoBlob = blob;
     try {

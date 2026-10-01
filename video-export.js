@@ -1,70 +1,57 @@
-import { containFit } from './photo-session.js';
-import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality, canEncodeVideo } from './vendor/mediabunny.mjs';
+import { STRIP, drawStrip } from './photo-strip.js';
+import { ALL_FORMATS, BlobSource, BufferTarget, CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output, Quality, canEncodeVideo } from './vendor/mediabunny.mjs';
 
-const WIDTH = 720, HEIGHT = 960, SHOT_MS = 1700, FPS = 20;
-const quality = new Quality({ bitrate: 1_200_000 });
-const recorderType = () => typeof MediaRecorder !== 'undefined' && typeof HTMLCanvasElement !== 'undefined' && HTMLCanvasElement.prototype.captureStream
-  ? ['video/mp4;codecs=avc1', 'video/mp4'].find(type => MediaRecorder.isTypeSupported(type)) : null;
-export function canMakeVideo() { return typeof VideoEncoder !== 'undefined' || Boolean(recorderType()); }
+export const VIDEO_SECONDS = 3;
+const FPS = 20, FRAME_COUNT = VIDEO_SECONDS * FPS;
+const quality = new Quality({ bitrate: 2_800_000 });
+export function canMakeVideo() { return typeof VideoEncoder !== 'undefined' && typeof VideoDecoder !== 'undefined'; }
 
-function drawFrame(context, photos, index) {
-  context.fillStyle = '#e7e2f1'; context.fillRect(0, 0, WIDTH, HEIGHT);
-  context.fillStyle = '#3d3854'; context.fillRect(24, 24, WIDTH - 48, HEIGHT - 48);
-  context.fillStyle = '#faf5f0'; context.font = '600 29px sans-serif';
-  context.fillText('CSS PHOTO CLUB', 53, 75);
-  context.textAlign = 'right'; context.fillText(`${String(index + 1).padStart(2, '0')} / 04`, WIDTH - 52, 75); context.textAlign = 'left';
-  const image = photos[index];
-  const fit = containFit(image.naturalWidth || image.width, image.naturalHeight || image.height, WIDTH - 100, HEIGHT - 245);
-  context.fillStyle = '#22202f'; context.fillRect(50, 108, WIDTH - 100, HEIGHT - 245);
-  context.drawImage(image, 50 + fit.x, 108 + fit.y, fit.width, fit.height);
-  context.fillStyle = '#b9cfbf'; context.fillRect(50, HEIGHT - 112, WIDTH - 100, 55);
-  context.fillStyle = '#363449'; context.font = '600 23px sans-serif';
-  context.fillText("WE DON'T CODE, WE BUILD", 69, HEIGHT - 76);
-}
-
-async function recordMp4(canvas, context, photos, active) {
-  const type = recorderType();
-  if (!type) throw new Error('MP4 creation needs a current Chrome or Edge browser. Your PNG download is still available.');
-  const stream = canvas.captureStream(FPS), recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 1_200_000 });
-  const chunks = [];
-  let timer, stopped = false;
-  const finished = new Promise((resolve, reject) => {
-    recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
-    recorder.onerror = event => reject(event.error || new Error('Video recording failed'));
-    recorder.onstop = () => stopped ? reject(new Error('Cancelled')) : resolve(new Blob(chunks, { type: 'video/mp4' }));
-  });
-  const started = performance.now();
-  const draw = () => {
-    if (!active()) { stopped = true; recorder.stop(); return; }
-    const elapsed = performance.now() - started;
-    drawFrame(context, photos, Math.min(3, Math.floor(elapsed / SHOT_MS)));
-    if (elapsed < SHOT_MS * 4) timer = setTimeout(draw, 1000 / FPS);
-    else recorder.stop();
-  };
-  try { drawFrame(context, photos, 0); recorder.start(); draw(); return await finished; }
-  finally { clearTimeout(timer); stream.getTracks().forEach(track => track.stop()); }
-}
-
-export async function makePhotoVideo(photos, { active = () => true } = {}) {
-  if (photos.length !== 4) throw new Error('Choose four photos first');
-  const canvas = document.createElement('canvas'); canvas.width = WIDTH; canvas.height = HEIGHT;
-  const context = canvas.getContext('2d', { alpha: false });
-  if (!await canEncodeVideo('avc', { width: WIDTH, height: HEIGHT, frameRate: FPS, quality })) {
-    return recordMp4(canvas, context, photos, active);
+export async function makePhotoVideo(clips, { active = () => true, progress = () => {}, ...stripOptions } = {}) {
+  if (clips.length !== 4 || clips.some(clip => !(clip instanceof Blob) || !clip.size)) {
+    throw new Error('These shots have no camera clips. Start a new round to make your moving strip. Your PNG is still available.');
   }
-  const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
-  const source = new CanvasSource(canvas, { codec: 'avc', quality });
-  output.addVideoTrack(source, { frameRate: FPS });
+  const inputs = [], iterators = [];
+  let output;
   try {
-    await output.start();
-    const framesPerPhoto = SHOT_MS / 1000 * FPS;
-    for (let frame = 0; frame < framesPerPhoto * 4; frame++) {
+    // Decode each selected clip on the same three-second timeline. Short quick-shutter
+    // clips are slowed to fit, so all four windows keep moving together.
+    for (const clip of clips) {
       if (!active()) throw new Error('Cancelled');
-      const index = Math.floor(frame / framesPerPhoto);
-      drawFrame(context, photos, index);
-      await source.add(frame / FPS, 1 / FPS, { keyFrame: frame % framesPerPhoto === 0 });
+      const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(clip) }); inputs.push(input);
+      const track = await input.getPrimaryVideoTrack();
+      if (!track || !await track.canDecode()) throw new Error('Could not read a camera clip. Retake this round in current Chrome or Edge.');
+      const start = await track.getFirstTimestamp(), end = await track.computeDuration();
+      if (!Number.isFinite(end) || end <= start) throw new Error('A camera clip is empty. Retake this round.');
+      const sink = new CanvasSink(track, { width: 720, poolSize: 1 });
+      const times = Array.from({ length: FRAME_COUNT }, (_, frame) => start + frame / FRAME_COUNT * (end - start));
+      iterators.push(sink.canvasesAtTimestamps(times)[Symbol.asyncIterator]());
+    }
+    let width;
+    for (const candidate of [750, 500]) {
+      const height = candidate / STRIP.width * STRIP.height;
+      if (await canEncodeVideo('avc', { width: candidate, height, frameRate: FPS, quality })) { width = candidate; break; }
+    }
+    if (!width) throw new Error('MP4 creation needs H.264 support in current Chrome or Edge. Your PNG is still available.');
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = width / STRIP.width * STRIP.height;
+    const context = canvas.getContext('2d', { alpha: false });
+    output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
+    const source = new CanvasSource(canvas, { codec: 'avc', quality });
+    output.addVideoTrack(source, { frameRate: FPS }); await output.start();
+    for (let frame = 0; frame < FRAME_COUNT; frame++) {
+      if (!active()) throw new Error('Cancelled');
+      const decoded = await Promise.all(iterators.map(iterator => iterator.next()));
+      if (decoded.some(result => result.done || !result.value)) throw new Error('Could not read all four camera clips. Retake this round.');
+      context.save(); context.scale(width / STRIP.width, width / STRIP.width);
+      drawStrip(context, decoded.map(result => result.value.canvas), stripOptions);
+      context.restore();
+      await source.add(frame / FPS, 1 / FPS, { keyFrame: frame % FPS === 0 });
+      progress(Math.round((frame + 1) / FRAME_COUNT * 100));
     }
     source.close(); await output.finalize();
     return new Blob([output.target.buffer], { type: 'video/mp4' });
-  } catch (error) { await output.cancel().catch(() => {}); throw error; }
+  } catch (error) { if (output) await output.cancel().catch(() => {}); throw error; }
+  finally {
+    await Promise.allSettled(iterators.map(iterator => iterator.return?.()));
+    inputs.forEach(input => input.dispose());
+  }
 }
