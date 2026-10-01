@@ -34,6 +34,10 @@ export async function makePhotoVideo(clips, { active = () => true, progress = ()
     if (!width) throw new Error('MP4 creation needs H.264 support in current Chrome or Edge. Your PNG is still available.');
     const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = width / STRIP.width * STRIP.height;
     const context = canvas.getContext('2d', { alpha: false });
+    // Draw artwork at the PNG's native size before scaling the completed strip.
+    // This preserves the pixel font and border rendering in the still export.
+    const strip = document.createElement('canvas'); strip.width = STRIP.width; strip.height = STRIP.height;
+    const stripContext = strip.getContext('2d', { alpha: false });
     output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
     const source = new CanvasSource(canvas, { codec: 'avc', quality });
     output.addVideoTrack(source, { frameRate: FPS }); await output.start();
@@ -41,9 +45,8 @@ export async function makePhotoVideo(clips, { active = () => true, progress = ()
       if (!active()) throw new Error('Cancelled');
       const decoded = await Promise.all(iterators.map(iterator => iterator.next()));
       if (decoded.some(result => result.done || !result.value)) throw new Error('Could not read all four camera clips. Retake this round.');
-      context.save(); context.scale(width / STRIP.width, width / STRIP.width);
-      drawStrip(context, decoded.map(result => result.value.canvas), stripOptions);
-      context.restore();
+      drawStrip(stripContext, decoded.map(result => result.value.canvas), stripOptions);
+      context.drawImage(strip, 0, 0, canvas.width, canvas.height);
       await source.add(frame / FPS, 1 / FPS, { keyFrame: frame % FPS === 0 });
       progress(Math.round((frame + 1) / FRAME_COUNT * 100));
     }
