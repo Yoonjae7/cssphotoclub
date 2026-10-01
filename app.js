@@ -1,20 +1,13 @@
 import { PhotoSession, PHOTO_COUNT, PICK_COUNT, POSE_MS, containFit } from './photo-session.js';
 import { STRIP, FRAME_DESIGNS, DEFAULT_FRAME, frameDesign, drawStrip } from './photo-strip.js';
-import { canArchiveLocally } from './photo-archive.js';
 import { canMakeVideo, makePhotoVideo } from './video-export.js';
+import { shareFiles } from './phone-share.js';
+import { chooseArchive, restoreArchive, saveToArchive } from './local-archive.js';
 import qrcode from './vendor/qrcode.mjs';
 const $ = id => document.getElementById(id);
 const session = new PhotoSession();
 const canvas = $('scene'), ctx = canvas.getContext('2d', { alpha: false }), video = $('camera');
-const state = { mode: 'off', view: 'capture', design: DEFAULT_FRAME, stream: null, opening: false, timer: null, deadline: 0, generation: 0, previewRevision: 0, resultUrl: null, resultBlob: null, resultKey: null, shareId: null, shareUrl: null, shareBusy: false, shareVideoReady: false, shareRevision: 0, shareExpiryTimer: null };
-function boothApi() {
-  if (canArchiveLocally(window.location)) return '';
-  const url = new URL($('booth-server-url').value.trim() || 'http://127.0.0.1:3000');
-  if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
-    throw new Error('The booth server address must be http://127.0.0.1 with its port.');
-  }
-  return url.origin;
-}
+const state = { mode: 'off', view: 'capture', design: DEFAULT_FRAME, stream: null, opening: false, timer: null, deadline: 0, generation: 0, previewRevision: 0, resultUrl: null, resultBlob: null, resultKey: null, videoBlob: null, videoPromise: null, photoArchived: false, videoArchived: false, shareUrl: null, shareBusy: false, shareRevision: 0, shareExpiryTimer: null, shareClock: null, autoShareTimer: null };
 const logos = { css: new Image(), nottingham: new Image() };
 logos.css.src = 'assets/css-logo.png'; logos.nottingham.src = 'assets/nottingham-logo.png';
 const assetsReady = Promise.all(Object.values(logos).map(image => image.decode().catch(() => {}))).then(() => document.fonts.ready);
@@ -51,6 +44,7 @@ function navigateStep(step) {
   else {
     $('strip-heading').innerHTML = step === 3 ? 'Your strip.<br><em>Your memories.</em>' : 'Save your<br><em>little keepsake.</em>';
     showView('result'); updateSaveControls(); updatePreview();
+    if (step === 4 && session.complete) schedulePhoneShare();
   }
 }
 function updateCapture() {
@@ -231,6 +225,7 @@ function chooseFrame(id) {
   const next = frameDesign(id).id;
   if (next === state.design) return;
   state.design = next; releaseResult(); updateSaveControls(); updatePreview();
+  if (session.step === 4 && session.complete) schedulePhoneShare();
 }
 function cycleDesign(direction) {
   const index = FRAME_DESIGNS.findIndex(design => design.id === state.design);
@@ -259,11 +254,12 @@ function updateSaveControls() {
   $('previous-design-button').disabled = building; $('next-design-button').disabled = building;
   const previewOnly = session.step === 3;
   $('continue-save-button').classList.toggle('hidden', !previewOnly);
-  for (const id of ['download-button', 'print-button']) { $(id).classList.toggle('hidden', previewOnly); $(id).disabled = !session.complete || building; }
-  $('download-button').innerHTML = building ? 'Making your PNG…' : 'Save & download PNG <span>↓</span>';
+  for (const id of ['download-button', 'download-video-button', 'print-button']) { $(id).classList.toggle('hidden', previewOnly); $(id).disabled = !session.complete || building; }
+  $('download-video-button').disabled ||= Boolean(state.videoPromise && !state.videoBlob);
+  $('download-button').innerHTML = building ? 'Making your PNG…' : 'Download photo (PNG) <span>↓</span>';
   $('share-button').classList.toggle('hidden', previewOnly);
-  $('share-button').disabled = !session.complete || building || state.shareBusy || (Boolean(state.shareUrl) && state.shareVideoReady);
-  $('share-button').innerHTML = state.shareBusy ? 'Preparing your phone link…' : state.shareUrl && !state.shareVideoReady ? 'Retry video upload <span>↗</span>' : 'Create phone QR <span>▦</span>';
+  $('share-button').disabled = !session.complete || building || state.shareBusy || Boolean(state.shareUrl);
+  $('share-button').innerHTML = state.shareBusy ? 'Preparing your phone QR…' : state.shareUrl ? 'Your phone QR is ready <span>✓</span>' : 'Create phone QR <span>▦</span>';
   $('save-help').textContent = session.complete ? 'All four are here. Change the design, then save it.' : `${session.selected.length} of 4 photos selected. Preview freely; choose four to save.`;
 }
 async function updatePreview() {
@@ -277,8 +273,12 @@ async function updatePreview() {
 function releaseResult() {
   if (state.resultUrl) URL.revokeObjectURL(state.resultUrl);
   clearTimeout(state.shareExpiryTimer); state.shareExpiryTimer = null;
+  clearInterval(state.shareClock); state.shareClock = null;
+  clearTimeout(state.autoShareTimer); state.autoShareTimer = null;
   state.resultUrl = null; state.resultBlob = null; state.resultKey = null; $('strip-result').removeAttribute('src'); $('archive-status').textContent = '';
-  state.shareRevision++; state.shareId = null; state.shareUrl = null; state.shareBusy = false; state.shareVideoReady = false;
+  state.videoBlob = null; state.videoPromise = null;
+  state.photoArchived = false; state.videoArchived = false;
+  state.shareRevision++; state.shareUrl = null; state.shareBusy = false;
   $('phone-share').classList.add('hidden'); $('share-status').textContent = '';
 }
 function exportKey() { return `${state.generation}:${state.design}:${session.selected.join(',')}`; }
@@ -305,15 +305,41 @@ async function makeStrip() {
   } catch (error) { if (generation === state.generation) { session.finishBuild(false); updateSaveControls(); notice('Could not make your strip. Please try again.', true); } return null; }
 }
 async function archiveStrip(blob, generation) {
-  $('archive-status').textContent = 'Saving your strip to Downloads/cssbooth/photo…';
   try {
-    const response = await fetch(`${boothApi()}/api/strips`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: blob, targetAddressSpace: 'loopback' });
-    if (!response.ok) throw new Error(`Local save failed (${response.status})`);
-    await response.json();
-    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = '✓ Saved in Downloads/cssbooth/photo on the booth laptop.';
+    const saved = await saveToArchive('photo', blob, archiveFilename('png'));
+    if (generation === state.generation && state.resultBlob === blob) {
+      state.photoArchived = saved;
+      $('archive-status').textContent = saved ? state.videoArchived ? '✓ Photo and MP4 saved in cssbooth/photo and cssbooth/video.' : '✓ Photo saved in cssbooth/photo.' : 'To keep automatic copies on this computer, choose a folder under Booth archive.';
+    }
   } catch {
-    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = 'Could not save locally. Start the booth server, then download this strip to keep a copy.';
+    if (generation === state.generation && state.resultBlob === blob) $('archive-status').textContent = 'Could not save to the archive folder. Download your photo here to keep a copy.';
   }
+}
+function archiveFilename(extension) { return `css-four-cut-${session.date.toISOString().replace(/[:.]/g, '-')}-${state.design}.${extension}`; }
+async function ensureVideo() {
+  if (state.videoBlob) return state.videoBlob;
+  if (state.videoPromise) return state.videoPromise;
+  if (!canMakeVideo()) throw new Error('MP4 creation needs a current Chrome or Edge browser. Your photo download is still available.');
+  const generation = state.generation, revision = state.shareRevision, photos = [...session.chosen], filename = archiveFilename('mp4');
+  const active = () => generation === state.generation && revision === state.shareRevision;
+  const promise = (async () => {
+    const images = await Promise.all(photos.map(loadPhoto));
+    if (!active()) throw new Error('Cancelled');
+    const blob = await makePhotoVideo(images, { active });
+    if (!active()) throw new Error('Cancelled');
+    state.videoBlob = blob;
+    try {
+      const saved = await saveToArchive('video', blob, filename);
+      if (active() && saved) {
+        state.videoArchived = true;
+        $('archive-status').textContent = state.photoArchived ? '✓ Photo and MP4 saved in cssbooth/photo and cssbooth/video.' : '✓ MP4 saved in cssbooth/video. Download the PNG to keep a photo copy.';
+      }
+    } catch { if (active()) $('archive-status').textContent = 'The video is ready. Download it here, or re-enable the archive folder.'; }
+    return blob;
+  })();
+  state.videoPromise = promise; updateSaveControls();
+  try { return await promise; }
+  finally { if (state.videoPromise === promise) { state.videoPromise = null; updateSaveControls(); } }
 }
 function drawQr(url) {
   const code = qrcode(0, 'M'); code.addData(url); code.make();
@@ -326,47 +352,46 @@ function drawQr(url) {
     if (code.isDark(row, column)) qrContext.fillRect((column + quiet) * cell, (row + quiet) * cell, cell, cell);
   }
 }
-async function postMedia(url, blob) {
-  const headers = { 'Content-Type': blob.type };
-  const response = await fetch(url, { method: 'POST', headers, body: blob, targetAddressSpace: 'loopback' });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.error || `Upload failed (${response.status})`);
-  return result;
+function schedulePhoneShare() {
+  clearTimeout(state.autoShareTimer);
+  state.autoShareTimer = setTimeout(() => {
+    state.autoShareTimer = null;
+    if (state.view !== 'result' || session.step !== 4 || !session.complete) return;
+    if (session.phase === 'building') schedulePhoneShare(); else createPhoneShare();
+  }, 600);
 }
 async function createPhoneShare() {
-  if (state.shareBusy || !session.complete) return;
+  if (state.shareBusy || state.shareUrl || !session.complete) return;
+  state.shareBusy = true; updateSaveControls();
   const result = await makeStrip();
-  if (!result) return;
-  const generation = state.generation, revision = state.shareRevision, selected = [...session.chosen];
-  const active = () => generation === state.generation && revision === state.shareRevision && state.view === 'result';
-  state.shareBusy = true; $('share-status').textContent = state.shareUrl ? 'Retrying your video…' : 'Uploading your photo…'; updateSaveControls();
+  if (!result) { state.shareBusy = false; updateSaveControls(); return; }
+  const generation = state.generation, revision = state.shareRevision;
+  const active = () => generation === state.generation && revision === state.shareRevision && state.view === 'result' && session.step === 4;
+  state.shareBusy = true; $('share-status').textContent = 'Making your MP4 and phone QR…'; updateSaveControls();
   try {
-    if (!state.shareUrl) {
-      const photo = state.resultBlob;
-      if (!active()) return;
-      const share = await postMedia(`${boothApi()}/api/shares`, photo);
-      if (!active()) return;
-      state.shareId = share.id; state.shareUrl = share.shareUrl;
-      state.shareExpiryTimer = setTimeout(() => {
-        if (!active()) return;
-        state.generation++; releaseResult(); session.reset(); eraseActivePhotos(); state.design = DEFAULT_FRAME;
-        showView('capture'); updateCapture(); notice('The five-minute QR expired. The booth laptop keeps its saved picture and video.');
-      }, Math.max(1, share.expiresAt - Date.now()));
-      drawQr(share.shareUrl);
-      $('share-link').href = share.shareUrl; $('share-link').textContent = share.shareUrl;
-      $('phone-share').classList.remove('hidden');
-    }
-    if (!canMakeVideo()) { $('share-status').textContent = 'Photo QR ready. This browser cannot make the video.'; return; }
-    $('share-status').textContent = 'Photo QR ready. Making your video…';
-    const photos = await Promise.all(selected.map(loadPhoto));
-    const videoBlob = await makePhotoVideo(photos);
+    const videoBlob = await ensureVideo();
     if (!active()) return;
-    $('share-status').textContent = 'Photo QR ready. Uploading your video…';
-    await postMedia(`${boothApi()}/api/shares/${state.shareId}/video`, videoBlob);
-    if (active()) { state.shareVideoReady = true; $('share-status').textContent = '✓ Photo and video are ready. Scan the QR with your phone.'; }
+    const share = await shareFiles(state.resultBlob, videoBlob, { active, progress: percent => { if (active()) $('share-status').textContent = `Preparing your phone QR… ${percent}%`; } });
+    if (!active()) return;
+    state.shareUrl = share.shareUrl;
+    drawQr(share.shareUrl);
+    $('share-link').href = share.shareUrl; $('share-link').textContent = 'Open your photo and MP4 downloads';
+    $('phone-share').classList.remove('hidden');
+    $('phone-share').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const deadline = Date.now() + share.remainingMs;
+    const countdown = () => {
+      const seconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      $('share-expiry').textContent = `Available for ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    };
+    state.shareClock = setInterval(countdown, 1000); countdown();
+    state.shareExpiryTimer = setTimeout(() => {
+      if (generation !== state.generation || revision !== state.shareRevision) return;
+      nextGroup(); notice('The five-minute QR expired. Your downloaded and archived copies are yours to keep.');
+    }, Math.max(1, share.remainingMs));
+    $('share-status').textContent = '✓ Scan to download your photo, MP4, or both.';
   } catch (error) {
-    if (active()) $('share-status').textContent = state.shareUrl ? `Photo QR ready. Video unavailable: ${error.message}` : `Could not connect to the booth laptop: ${error.message}. Start the local server and check its address.`;
-  } finally { if (active()) { state.shareBusy = false; updateSaveControls(); } }
+    if (active()) $('share-status').textContent = error.message === 'Failed to fetch' ? 'Could not reach the website. Check the internet connection and retry your QR.' : error.message;
+  } finally { if (generation === state.generation && revision === state.shareRevision) { state.shareBusy = false; updateSaveControls(); } }
 }
 function nextGroup() {
   stopTimer(); state.generation++; releaseResult(); session.reset(); eraseActivePhotos(); state.design = DEFAULT_FRAME;
@@ -385,6 +410,18 @@ async function printStrip() {
   await $('strip-result').decode().catch(() => {});
   if (result.url === state.resultUrl && state.view === 'result') window.print();
 }
+async function downloadVideo() {
+  const result = await makeStrip();
+  if (!result) return;
+  const generation = state.generation, revision = state.shareRevision;
+  try {
+    const blob = await ensureVideo();
+    if (generation !== state.generation || revision !== state.shareRevision) return;
+    const url = URL.createObjectURL(blob), link = document.createElement('a');
+    link.href = url; link.download = archiveFilename('mp4'); document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  } catch (error) { if (generation === state.generation && revision === state.shareRevision) notice(error.message, true); }
+}
 $('camera-button').addEventListener('click', openCamera);
 $('demo-button').addEventListener('click', startDemo);
 $('start-button').addEventListener('click', startRound);
@@ -398,6 +435,7 @@ $('next-design-button').addEventListener('click', () => cycleDesign(1));
 $('next-group-button').addEventListener('click', nextGroup);
 $('edit-selection-button').addEventListener('click', () => navigateStep(2));
 $('download-button').addEventListener('click', downloadStrip);
+$('download-video-button').addEventListener('click', downloadVideo);
 $('print-button').addEventListener('click', printStrip);
 $('share-button').addEventListener('click', createPhoneShare);
 for (const button of document.querySelectorAll('.journey button')) button.addEventListener('click', () => navigateStep(Number(button.dataset.step)));
@@ -415,17 +453,20 @@ document.addEventListener('keydown', event => {
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden && inRound()) { navigateStep(1); notice('The round is paused. Continue your photos when you return.'); } });
 window.addEventListener('beforeunload', () => { stopTimer(); state.stream?.getTracks().forEach(track => track.stop()); if (state.resultUrl) URL.revokeObjectURL(state.resultUrl); });
-if (!canArchiveLocally(window.location)) {
-  $('booth-server-wrap').classList.remove('hidden');
-  $('booth-server-url').value = localStorage.getItem('boothServerUrl') || 'http://127.0.0.1:3000';
-  $('booth-server-url').addEventListener('change', () => localStorage.setItem('boothServerUrl', $('booth-server-url').value.trim()));
-  $('check-booth-server').addEventListener('click', async () => {
-    $('booth-server-status').textContent = 'Connecting to the booth laptop…';
-    try {
-      const response = await fetch(`${boothApi()}/api/health`, { cache: 'no-store', targetAddressSpace: 'loopback' });
-      if (!response.ok) throw new Error(`Server responded ${response.status}`);
-      $('booth-server-status').textContent = '✓ Booth laptop connected. Pictures and videos will be saved locally.';
-    } catch { $('booth-server-status').textContent = 'Could not connect. Start the server and set BOOTH_SITE_ORIGIN to this website’s address.'; }
-  });
-}
+$('choose-archive').addEventListener('click', async () => {
+  try {
+    await chooseArchive();
+    $('archive-folder-status').textContent = '✓ Automatic saves enabled: cssbooth/photo and cssbooth/video.';
+    const generation = state.generation, revision = state.shareRevision;
+    if (state.resultBlob) await archiveStrip(state.resultBlob, generation);
+    if (state.videoBlob) {
+      const saved = await saveToArchive('video', state.videoBlob, archiveFilename('mp4'));
+      if (saved && generation === state.generation && revision === state.shareRevision) {
+        state.videoArchived = true;
+        $('archive-status').textContent = state.photoArchived ? '✓ Photo and MP4 saved in cssbooth/photo and cssbooth/video.' : '✓ MP4 saved in cssbooth/video. Download the PNG to keep a photo copy.';
+      }
+    }
+  } catch (error) { if (error.name !== 'AbortError') $('archive-folder-status').textContent = error.message; }
+});
+restoreArchive().then(ready => { if (ready) $('archive-folder-status').textContent = '✓ Automatic saves enabled: cssbooth/photo and cssbooth/video.'; });
 createDesignOptions(); showView('capture'); updateCapture(); requestAnimationFrame(frame);

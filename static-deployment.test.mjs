@@ -4,7 +4,6 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildStaticSite, STATIC_FILES } from './build-static.mjs';
-import { canArchiveLocally } from './photo-archive.js';
 
 async function filesIn(directory, prefix = '') {
   const files = [];
@@ -23,12 +22,13 @@ async function temporaryOutput(run) {
   }
 }
 
-test('Vercel builds static browser files without a hosted sharing API', async () => {
+test('Vercel publishes browser files and deploys the sharing function', async () => {
   const config = JSON.parse(await readFile(new URL('./vercel.json', import.meta.url), 'utf8'));
   assert.equal(config.framework, null);
   assert.equal(config.buildCommand, 'node build-static.mjs');
   assert.equal(config.outputDirectory, 'dist');
   assert.equal(config.builds, undefined);
+  assert.equal(config.functions['api/share.js'].maxDuration, 60);
 });
 
 test('static build contains every browser dependency, no photos or server code', async () => {
@@ -56,24 +56,18 @@ test('static build refuses unexpected files without deleting them', async () => 
   });
 });
 
-test('hosted sites never archive photos; HTTP loopback booth keeps local saving', () => {
-  for (const host of ['localhost', '127.0.0.1', '[::1]']) assert.equal(canArchiveLocally(new URL(`http://${host}:3000/`)), true);
-  for (const address of ['https://cssphotoclub.vercel.app', 'https://localhost', 'http://example.com', 'https://127.0.0.1', 'http://localhost.example.com', 'http://192.168.1.10', 'file:///index.html']) assert.equal(canArchiveLocally(new URL(address)), false);
-});
-
-test('hosted PNG export asks the booth laptop to save a permanent picture', async () => {
+test('PNG export uses browser folder permission without requiring a laptop server', async () => {
   const source = await readFile(new URL('./app.js', import.meta.url), 'utf8');
-  const body = source.match(/async function archiveStrip\(blob, generation\) \{([\s\S]*?)\n\}\nfunction drawQr/)[1];
-  const invoke = new Function('boothApi', 'state', '$', 'fetch', `return async (blob, generation) => {${body}}`);
+  const body = source.match(/async function archiveStrip\(blob, generation\) \{([\s\S]*?)\n\}\nfunction archiveFilename/)[1];
+  const invoke = new Function('saveToArchive', 'archiveFilename', 'state', '$', `return async (blob, generation) => {${body}}`);
   const blob = {}, status = { textContent: '' }; let requests = 0;
-  const archive = invoke(() => 'http://127.0.0.1:3000', { generation: 1, resultBlob: blob }, () => status, async (url, options) => {
+  const archive = invoke(async (directory, savedBlob, filename) => {
     requests++;
-    assert.equal(url, 'http://127.0.0.1:3000/api/strips');
-    assert.equal(options.body, blob);
-    return { ok: true, json: async () => ({ filename: 'saved.png' }) };
-  });
+    assert.equal(directory, 'photo'); assert.equal(savedBlob, blob); assert.equal(filename, 'saved.png'); return true;
+  }, () => 'saved.png', { generation: 1, resultBlob: blob }, () => status);
   await archive(blob, 1);
   assert.equal(requests, 1);
-  assert.match(status.textContent, /Saved in Downloads\/cssbooth\/photo/);
+  assert.match(status.textContent, /Photo saved in cssbooth\/photo/);
   assert.match(source, /link.download = `css-four-cut-/);
+  assert.doesNotMatch(source, /boothApi|BOOTH_SITE_ORIGIN|127\.0\.0\.1|targetAddressSpace/);
 });

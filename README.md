@@ -1,78 +1,67 @@
 # CSS Photo Club
 
-A Korean-style four-cut photo booth for the Computer Science Society fair. The capture page can run on Vercel or on the booth laptop. A small server on the booth laptop saves the finished PNG and slideshow video and serves the five-minute phone QR.
+A four-cut photo booth for the Computer Science Society fair. Visitors take eight photos, pick four, choose a strip design, and scan a QR to download a PNG photo, an MP4 slideshow, or both.
 
-## Run
+## Vercel setup
 
-Requires Node.js 18+ and a current Chrome or Edge browser. The local booth needs no npm packages or FFmpeg.
+Import this repository into Vercel with the repository root as the Root Directory. The checked-in `vercel.json` uses static hosting for the browser interface and deploys `api/share.js` for temporary phone downloads. No server needs to run on the booth laptop.
 
-```powershell
-node server.mjs
+1. In the Vercel project, open **Storage** and create **Upstash Redis**. Connect it to the project for **Production** (and Preview if wanted).
+2. Check **Settings → Environment Variables** for `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`. The integration normally supplies these. `KV_REST_API_URL` and `KV_REST_API_TOKEN` are also supported. Keep these credentials in Vercel; they are never sent to visitors.
+3. Redeploy after adding the storage connection or changing environment variables.
+4. Open the deployed HTTPS site in a current Chrome or Edge browser and try a demo round. The final save screen prepares its QR automatically. A phone can use Wi-Fi or mobile data.
+
+The app needs internet access to share files. Vercel Blob, `BOOTH_UPLOAD_KEY`, and `BOOTH_SITE_ORIGIN` are no longer used. If a previous version uploaded files to Vercel Blob, remove those old files from that store separately.
+
+## Permanent copies on the booth computer
+
+Before the event, expand **Booth archive** at the top of the site, press **Choose / enable archive folder**, select **Downloads**, and allow write access. The browser creates:
+
+```text
+Downloads/
+  cssbooth/
+    photo/   # Finished four-photo PNG strips
+    video/   # Silent MP4 slideshows of the four selected stills
 ```
 
-Open http://localhost:3000 on the booth laptop. Connect the laptop and phone to the same Wi-Fi. Allow Node through the laptop firewall if prompted. The QR points to the laptop's LAN address; it does not work for a phone outside that network.
+You can also select an existing `cssbooth` folder. The app remembers the folder handle, but the browser may ask you to enable permission again after restarting. Only the folder handle is stored in IndexedDB; photos are never saved in browser storage. Selecting another parent folder puts `cssbooth` inside that folder.
 
-## Host on Vercel
+Once permission is enabled, PNGs and MP4s save automatically as they are created. Existing files in an older `picture` folder stay there. Permanent local copies do not expire. Photo/video downloads and QR sharing work even if the operator has not enabled the local archive. A website cannot silently choose a filesystem folder without browser permission.
 
-Import this repository into Vercel with the repository root as the Root Directory. The checked-in `vercel.json` selects **Other** (static hosting), runs `node build-static.mjs` and publishes only `dist/`. It overrides framework/build/output defaults; do not configure `app.js` as a Node function or add catch-all function rewrites. Browser code uses `document` and must run in the browser, not a Vercel Function.
+## Visitor flow
 
-The static build includes only HTML, CSS, browser modules, logos and bundled fonts. Server code, tests, recordings, saved photos and backups are never published. Build locally with `node build-static.mjs`.
+1. Open the camera and allow webcam access, or use the illustrated demo.
+2. Take eight photos, with a three-second countdown and a pause between poses. **Take photo now** or Space snaps sooner.
+3. Pick four favourites. Their selection order is the strip and video order. **Next: see my strip** opens the final save screen.
+4. Choose Design 1, 2, or 3. The app makes a full-resolution 1000 × 3136 PNG and a silent 6.8-second MP4 showing each chosen photo for 1.7 seconds.
+5. The QR appears when both uploads are complete. Scan it to open separate **Download photo (PNG)** and **Download video (MP4)** buttons. Both files also have download buttons on the booth screen.
+6. **Next group** clears the active browser round. Changing photos or designs invalidates the active export and prepares a fresh QR. Links already shown keep their own five-minute expiry.
 
-On the hosted HTTPS site, webcam capture, photo selection, preview, PNG generation and printing run in the booth browser. The finished PNG is sent to the booth laptop when generated; **Create phone QR** sends the PNG and a silent slideshow video of the four selected stills to the laptop. The Vercel deployment stores no photos and needs no Blob store or sharing key.
+All four numbered steps are accessible without prerequisites; only exporting requires four selected photos. Leaving a countdown pauses it without erasing partial shots. Camera images are mirrored and fitted without cropping. Countdown, flash and other screen controls are not baked into photos. The transparent Nottingham and CSS logos and the phrase **We don't Code, We Build** appear on every strip.
 
-### Connect the hosted site to the booth laptop
+## Five-minute sharing and privacy
 
-1. Keep this repository and Node.js on the booth laptop. Start the local server with the exact Vercel site origin (no trailing path):
+The five-minute countdown starts when both files finish uploading and the QR is ready. Each temporary file chunk and the share record has the same Redis expiry. The download API also checks the expiry on every request. Redis automatically expires the temporary data even if the booth tab closes; no laptop server, browser timer or cron job is needed for cloud cleanup.
 
-   ```sh
-   BOOTH_SITE_ORIGIN=https://YOUR-SITE.vercel.app node server.mjs
-   ```
+The share ID is a random, unguessable download capability. Anyone with the QR link can download until expiry. Upload permissions are separate and cannot alter a completed share. Upload sizes and creation rates are limited. Larger PNGs upload in small chunks so they fit Vercel's request limits. Files are served through the expiry-checking API with caching disabled; there are no permanent public media URLs.
 
-   In Windows PowerShell, use `$env:BOOTH_SITE_ORIGIN='https://YOUR-SITE.vercel.app'; node server.mjs` instead.
-2. Open that Vercel site in Chrome or Edge on the **same laptop**. On the save screen, leave **Booth laptop server** at `http://127.0.0.1:3000` and click **Check connection**. Allow the browser's local network access prompt. If the server uses another port, change this address to match.
-3. Connect a phone to the same Wi-Fi as the laptop. Select four photos, open **Save your strip**, and press **Create phone QR**. Scan the QR and use the separate photo and video download buttons.
+Raw camera shots stay in the browser's current-round memory. Only the selected strip and silent MP4 are sent to temporary storage. No microphone is used. At QR expiry, the active browser round is cleared. Files already downloaded to a phone or saved in the permanent local archive remain with their owners.
 
-The video is a silent, roughly seven-second slideshow. The QR starts its five-minute clock when the photo is saved. After five minutes the local server rejects the link and removes its temporary photo/video copies; it also removes expired copies after a restart. Keep the server running for timely deletion. Anyone with the unguessable QR link can download during those five minutes. Files a visitor has already downloaded to a phone cannot be recalled.
+Existing `recordings/`, `photo-strips/`, `share-media/` and `.legacy-signing-backup/` files from older versions are not served or published. New versions do not write to these folders.
 
-The laptop keeps the finished PNG in `~/Downloads/cssbooth/photo/` and the slideshow in `~/Downloads/cssbooth/video/`; these **do not expire**. On Windows, `~` means the current user's profile directory. If the laptop has multiple network interfaces, set `BOOTH_PUBLIC_URL=http://LAPTOP-LAN-IP:3000` before starting the server. `BOOTH_ARCHIVE_DIR` can override the archive's `cssbooth` folder. Temporary QR files live in `share-media/` and are removed on expiry. Existing files previously uploaded to Vercel Blob under the old version require manual removal from that store.
+## Development and checks
 
-## The booth
+Requires Node.js 18+ for checks and the optional local development preview. Browser libraries are pinned and bundled in `vendor/` with their licenses; no npm dependencies are required.
 
-1. Open the camera and allow webcam access, or try the illustrated demo.
-2. Start a round of eight photos. Each shot has a three-second countdown, with a short pause to change pose. Click **Take photo now** or press Space to snap sooner.
-3. Pick four favourites in the full-width photo grid. Tap again to deselect. Picking order is strip order; selected cards show frame numbers. **Next: see my strip** opens the save screen directly.
-4. Change designs on the save screen, using previous / next arrows or Design 1–3. One large preview shows the current design with your selected photos. There is no separate frame-selection page and no named styles.
-5. **Save & download PNG** generates the current design, saves it on the booth laptop and downloads it in the browser. **Create phone QR** sends the selected strip and slideshow video to the laptop for phone download. Printing uses the same PNG. Changing photos or design clears the active export so the next save cannot use an outdated strip; existing saved files are untouched.
-
-All four numbered step buttons are always available: **Take 8 photos**, **Pick your 4**, **Your strip**, **Save your strip**. Steps 3 and 4 share the preview workspace. You can jump directly from 1 to 3 or 4 without taking or choosing photos; empty slots show placeholders. Only exporting requires four selected photos. Leaving an active countdown pauses the round without erasing partial shots; return to step 1 and press **Continue my photos**.
-
-The strip is a 1000 × 3136 PNG with four landscape photos and the original transparent University of Nottingham logo on the left and CSS logo on the right. Three ready-made designs, with no visitor fields or fiddly editing controls:
-
-- **Design 1** — cream graph paper, pastel tape, pixel hearts and a lavender footer.
-- **Design 2** — dark retro-computer windows, mint cursors and a terminal-style footer.
-- **Design 3** — mint paper, pink stars, checkerboard edges and a pink footer.
-
-All frames carry the society's signature phrase: **We don't Code, We Build**. Artwork stays outside the photos. Changing designs never crops or filters the chosen photos. Next group clears the active round and resets to Design 1.
-
-Camera images are mirrored and fitted without cropping or magnification. If the camera has a different aspect ratio, letterboxing preserves the whole image. Hardware zoom is set to its minimum where supported. Countdown, flash and screen controls are not baked into photos.
-
-## Privacy and storage
-
-- No microphone. Camera capture and strip generation stay in the browser. The finished strip and silent video go only to the booth laptop's local server.
-- Raw shots exist only in memory for the current round. No browser photo history is stored.
-- Finished strips are saved in `~/Downloads/cssbooth/photo/` when generated, and slideshow videos in `~/Downloads/cssbooth/video/` when shared. Phone sharing stores temporary copies in `share-media/` for five minutes. A browser PNG download still works if the local server is unavailable, but it will not be saved in `cssbooth` until the server is running.
-- Retaking / next group clears the active shots, not saved strips. Cancel discards the active round. Hiding the tab pauses capture and keeps the shots.
-- Existing `recordings/` and previous autograph browser data are untouched. The retired signing source has a recoverable copy in `.legacy-signing-backup/`, not served by the app. Old binary caches are not loaded.
-- Printing opens the browser print dialog; choose your printer / paper size there.
-
-Shortcuts: **D** opens the demo, **Space** starts / snaps, **Escape** cancels a round. On the photo screen, **1–8** selects photos and **Enter** opens the save preview. On the shared strip screen, **1–3** or **left / right arrows** changes design. **Enter** moves from step 3 to 4, then saves / downloads when four photos are selected. Focused buttons and links keep their normal Space / Enter behaviour.
-
-## Check
-
-```powershell
+```sh
 npm run check
 npm test
 npm run build
+npm start
 ```
 
-The demo exercises the eight-shot / choose-four / PNG flow without a webcam. Test the live webcam, printer, local archive and phone QR on the booth computer before the fair.
+`npm start` opens a development preview at http://localhost:3000. For local sharing tests, export the Redis variables first; on Node.js 20+ you can also use `node --env-file=.env.local server.mjs`. Copy `.env.example` for the variable names and keep real credentials out of Git.
+
+Production publishes only the allowlisted browser assets in `dist/` plus the Vercel sharing function. It excludes media, backups, server preview code and tests. The build refuses unexpected files in `dist/` to avoid accidentally publishing data.
+
+Before the event, test the live webcam, printer, both archive folders, and the QR on an actual phone. MP4 generation uses H.264 with Mediabunny/WebCodecs, with an MP4-only MediaRecorder fallback. Current Chrome or Edge is required on the booth computer.

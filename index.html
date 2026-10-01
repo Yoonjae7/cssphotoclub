@@ -17,6 +17,7 @@
       <button id="step-frame" data-step="3"><b>03</b><span>Your strip</span></button><i>→</i>
       <button id="step-strip" data-step="4"><b>04</b><span>Save your strip</span></button>
     </nav>
+    <details class="archive-settings"><summary>Booth archive</summary><p>For automatic copies on this computer, choose your Downloads folder once. The app creates cssbooth/photo and cssbooth/video inside it.</p><button id="choose-archive" class="text-button">Choose / enable archive folder →</button><small id="archive-folder-status" role="status">You can download and share files without enabling the local archive.</small></details>
     <div id="notice" class="notice hidden" role="status"></div>
     <section id="capture-view">
       <div class="page-heading"><div><p class="eyebrow">THE CSS FOUR-CUT PHOTO BOOTH / 인생네컷</p><h1>Four frames.<br><em>One good memory.</em></h1></div><p class="heading-note">Grab your people.<br>We’ll take eight. You keep four.</p></div>
@@ -52,10 +53,9 @@
           <div id="design-options" class="design-options" role="group" aria-label="Photo strip designs"></div>
           <p id="save-help" class="save-help" role="status">Choose four photos to save your strip.</p>
           <button class="button purple hidden" id="continue-save-button">Continue to save <span>→</span></button>
-          <button class="button mint" id="download-button" disabled>Save & download PNG <span>↓</span></button><button class="button outline" id="print-button" disabled>Print my strip <span>↗</span></button>
-          <div id="booth-server-wrap" class="booth-server-wrap hidden"><label for="booth-server-url">Booth laptop server</label><input id="booth-server-url" type="url" inputmode="url" spellcheck="false" value="http://127.0.0.1:3000"><button class="text-button" id="check-booth-server">Check connection</button><small id="booth-server-status" role="status">Run <code>node server.mjs</code> on this laptop, then allow the browser’s local network prompt.</small></div>
+          <button class="button mint" id="download-button" disabled>Download photo (PNG) <span>↓</span></button><button class="button purple" id="download-video-button" disabled>Download video (MP4) <span>↓</span></button><button class="button outline" id="print-button" disabled>Print my strip <span>↗</span></button>
           <button class="button purple" id="share-button" disabled>Create phone QR <span>▦</span></button>
-          <div id="phone-share" class="phone-share hidden"><h3>Scan to save on your phone</h3><canvas id="share-qr" role="img" aria-label="QR code for your photo and video download page"></canvas><a id="share-link" target="_blank" rel="noopener noreferrer"></a></div>
+          <div id="phone-share" class="phone-share hidden"><h3>Scan to save on your phone</h3><canvas id="share-qr" role="img" aria-label="QR code for your photo and video download page"></canvas><a id="share-link" target="_blank" rel="noopener noreferrer"></a><p id="share-expiry" role="timer"></p></div>
           <p id="share-status" class="share-status" role="status"></p>
           <p id="archive-status" class="archive-status" role="status"></p><div class="result-links"><button class="text-button" id="edit-selection-button">← Change photos</button><button class="text-button" id="next-group-button">Next group →</button></div><small>HIGH-RES PNG · FOUR PHOTOS · ONE KEEPSAKE</small>
         </div>
@@ -63,7 +63,7 @@
       <img id="strip-result" class="print-only" alt="Your finished CSS four-photo strip">
     </section>
   </main>
-  <footer><span>COMPUTER SCIENCE SOCIETY</span><span>Phone links last five minutes. Files stay on the booth laptop. No microphone.</span><span>WE DON'T CODE, WE BUILD ↗</span></footer>
+  <footer><span>COMPUTER SCIENCE SOCIETY</span><span>Scan for your PNG and MP4. Phone links last five minutes. No microphone.</span><span>WE DON'T CODE, WE BUILD ↗</span></footer>
   <video id="camera" autoplay playsinline muted hidden></video><script type="module" src="app.js"></script>
 </body>
 </html>
