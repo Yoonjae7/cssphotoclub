@@ -15,7 +15,7 @@ test('takes exactly eight photos, with no duplicate captures between countdowns'
     session.resume();
   }
   assert.equal(session.phase, 'choosing'); assert.equal(session.photos.length, 8);
-  assert.equal(session.capture('ninth'), false); assert.equal(POSE_MS, 3000);
+  assert.equal(session.capture('ninth'), false); assert.equal(POSE_MS, 5000);
 });
 test('requires exactly four unique favourites and preserves click order', () => {
   const session = completed();

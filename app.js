@@ -56,7 +56,7 @@ function updateCapture() {
   $('start-button').innerHTML = session.phase === 'capturing' ? 'Take photo now <span>↗</span>' : session.phase === 'between' ? 'Nice! Next pose…' : session.phase === 'paused' ? 'Continue my photos <span>↗</span>' : 'Start my 8 photos <span>↗</span>';
   $('cancel-button').classList.toggle('hidden', !inRound());
   $('shot-countdown').classList.toggle('hidden', session.phase !== 'capturing');
-  $('capture-help').textContent = inRound() ? 'Automatic countdown · press Space to snap sooner.' : 'Three seconds to pose before each photo.';
+  $('capture-help').textContent = inRound() ? 'Automatic countdown · press Space to snap sooner.' : 'Five seconds to pose before each photo.';
   $('camera-status').textContent = state.mode === 'off' ? 'CAMERA OFF' : inRound() ? `PHOTO ${Math.min(PHOTO_COUNT, session.photos.length + 1)} / ${PHOTO_COUNT}` : state.mode === 'demo' ? 'DEMO · NO CAMERA NEEDED' : 'LIVE CAMERA · READY';
   $('shot-progress').replaceChildren(...Array.from({ length: PHOTO_COUNT }, (_, index) => {
     const dot = document.createElement('span'); dot.textContent = String(index + 1).padStart(2, '0');
@@ -163,7 +163,7 @@ function countdown() {
   cancelSceneClip(); drawScene(performance.now()); state.clipRecorder = startSceneClip(canvas);
   stopTimer(); state.deadline = performance.now() + POSE_MS;
   $('shot-label').textContent = `PHOTO ${String(session.photos.length + 1).padStart(2, '0')} / 08`;
-  $('countdown-number').textContent = '3'; updateCapture();
+  $('countdown-number').textContent = String(POSE_MS / 1000); updateCapture();
   state.timer = setTimeout(takePhoto, POSE_MS);
 }
 function startRound() {
@@ -268,7 +268,7 @@ function updateSaveControls() {
   $('phone-share').classList.toggle('hidden', previewOnly || !state.shareUrl);
   $('share-status').classList.toggle('hidden', previewOnly);
   $('continue-save-button').classList.toggle('hidden', !previewOnly);
-  for (const id of ['download-button', 'download-video-button', 'print-button']) { $(id).classList.toggle('hidden', previewOnly); $(id).disabled = !session.complete || building; }
+  for (const id of ['download-button', 'download-video-button']) { $(id).classList.toggle('hidden', previewOnly); $(id).disabled = !session.complete || building; }
   $('download-video-button').disabled ||= Boolean(state.videoPromise && !state.videoBlob);
   $('download-button').innerHTML = building ? 'Making your PNG…' : 'Download photo (PNG) <span>↓</span>';
   $('share-button').classList.toggle('hidden', previewOnly);
@@ -289,7 +289,7 @@ function releaseResult() {
   clearTimeout(state.shareExpiryTimer); state.shareExpiryTimer = null;
   clearInterval(state.shareClock); state.shareClock = null;
   clearTimeout(state.autoShareTimer); state.autoShareTimer = null;
-  state.resultUrl = null; state.resultBlob = null; state.resultKey = null; $('strip-result').removeAttribute('src'); $('archive-status').textContent = '';
+  state.resultUrl = null; state.resultBlob = null; state.resultKey = null; $('archive-status').textContent = '';
   state.videoBlob = null; state.videoPromise = null;
   state.photoArchived = false; state.videoArchived = false;
   state.shareRevision++; state.shareUrl = null; state.shareBusy = false;
@@ -312,7 +312,7 @@ async function makeStrip() {
     if (!blob) throw new Error('PNG export failed');
     if (generation !== state.generation || key !== exportKey() || session.phase !== 'building') return null;
     releaseResult(); state.resultBlob = blob; state.resultUrl = URL.createObjectURL(blob); state.resultKey = key;
-    $('strip-result').src = state.resultUrl; session.finishBuild(); updateSaveControls();
+    session.finishBuild(); updateSaveControls();
     $('step-strip').classList.add('complete');
     archiveStrip(blob, generation);
     return {url:state.resultUrl};
@@ -421,12 +421,6 @@ async function downloadStrip() {
   link.download = `css-four-cut-${session.date.toISOString().replace(/[:.]/g, '-')}.png`;
   document.body.append(link); link.click(); link.remove();
 }
-async function printStrip() {
-  const result = await makeStrip();
-  if (!result) return;
-  await $('strip-result').decode().catch(() => {});
-  if (result.url === state.resultUrl && state.view === 'result') window.print();
-}
 async function downloadVideo() {
   const result = await makeStrip();
   if (!result) return;
@@ -453,7 +447,6 @@ $('next-group-button').addEventListener('click', nextGroup);
 $('edit-selection-button').addEventListener('click', () => navigateStep(2));
 $('download-button').addEventListener('click', downloadStrip);
 $('download-video-button').addEventListener('click', downloadVideo);
-$('print-button').addEventListener('click', printStrip);
 $('share-button').addEventListener('click', createPhoneShare);
 for (const button of document.querySelectorAll('.journey button')) button.addEventListener('click', () => navigateStep(Number(button.dataset.step)));
 document.addEventListener('keydown', event => {

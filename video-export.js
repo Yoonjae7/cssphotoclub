@@ -1,7 +1,8 @@
 import { STRIP, drawStrip } from './photo-strip.js';
+import { POSE_MS } from './photo-session.js';
 import { ALL_FORMATS, BlobSource, BufferTarget, CanvasSink, CanvasSource, Input, Mp4OutputFormat, Output, Quality, canEncodeVideo } from './vendor/mediabunny.mjs';
 
-export const VIDEO_SECONDS = 3;
+export const VIDEO_SECONDS = POSE_MS / 1000;
 const FPS = 20, FRAME_COUNT = VIDEO_SECONDS * FPS;
 const quality = new Quality({ bitrate: 2_800_000 });
 export function canMakeVideo() { return typeof VideoEncoder !== 'undefined' && typeof VideoDecoder !== 'undefined'; }
@@ -13,7 +14,7 @@ export async function makePhotoVideo(clips, { active = () => true, progress = ()
   const inputs = [], iterators = [];
   let output;
   try {
-    // Decode each selected clip on the same three-second timeline. Short quick-shutter
+    // Decode each selected clip on the same five-second timeline. Short quick-shutter
     // clips are slowed to fit, so all four windows keep moving together.
     for (const clip of clips) {
       if (!active()) throw new Error('Cancelled');

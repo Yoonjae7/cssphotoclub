@@ -31,9 +31,9 @@ Once permission is enabled, PNGs and MP4s save automatically as they are created
 ## Visitor flow
 
 1. Open the camera and allow webcam access, or use the illustrated demo.
-2. Take eight photos, with a three-second countdown and a pause between poses. A silent camera clip is recorded during each countdown; only the clean camera canvas is captured. **Take photo now** or Space snaps sooner.
+2. Take eight photos, with a five-second countdown and a pause between poses. A silent camera clip is recorded during each countdown; only the clean camera canvas is captured. **Take photo now** or Space snaps sooner.
 3. Pick four favourites. Their selection order is the strip and video slot order. **Next: see my strip** opens the final save screen.
-4. Choose Design 1, 2, or 3. The app makes a full-resolution 1000 × 3136 PNG and a silent three-second MP4 of the same complete strip. Each of the four slots plays the camera clip recorded during its shot countdown, all at the same time. The design, logos, date, borders and footer match the PNG. The MP4 preserves the exact strip aspect ratio at 750 × 2352 (500 × 1568 on devices that need a smaller encoder input). Quick-shutter clips are slowed to fit the same three-second timeline.
+4. Choose Design 1, 2, or 3. The app makes a full-resolution 1000 × 3136 PNG and a silent five-second MP4 of the same complete strip. Each of the four slots plays the camera clip recorded during its shot countdown, all at the same time. The design, logos, date, borders and footer match the PNG. The MP4 preserves the exact strip aspect ratio at 750 × 2352 (500 × 1568 on devices that need a smaller encoder input). Quick-shutter clips are slowed to fit the same five-second timeline.
 5. The QR appears when both uploads are complete. Scan it to open separate **Download photo (PNG)** and **Download video (MP4)** buttons. Both files also have download buttons on the booth screen.
 6. **Next group** clears the active browser round. Changing photos or designs invalidates the active export and prepares a fresh QR. Links already shown keep their own five-minute expiry.
 
@@ -64,4 +64,4 @@ npm start
 
 Production publishes only the allowlisted browser assets in `dist/` plus the Vercel sharing function. It excludes media, backups, server preview code and tests. The build refuses unexpected files in `dist/` to avoid accidentally publishing data.
 
-Before the event, test the live webcam, printer, both archive folders, and the QR on an actual phone. MP4 generation uses H.264 with Mediabunny/WebCodecs, and decodes the recorded camera clips with WebCodecs. No clips are replaced by still-photo slideshows. Current Chrome or Edge is required on the booth computer.
+Before the event, test the live webcam, both archive folders, and the QR on an actual phone. MP4 generation uses H.264 with Mediabunny/WebCodecs, and decodes the recorded camera clips with WebCodecs. No clips are replaced by still-photo slideshows. Current Chrome or Edge is required on the booth computer.

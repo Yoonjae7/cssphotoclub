@@ -1,6 +1,6 @@
 export const PHOTO_COUNT = 8;
 export const PICK_COUNT = 4;
-export const POSE_MS = 3000;
+export const POSE_MS = 5000;
 export function containFit(sourceWidth, sourceHeight, width, height) {
   if (![sourceWidth, sourceHeight, width, height].every(n => Number.isFinite(n) && n > 0)) throw new Error('Invalid photo dimensions');
   const scale = Math.min(width / sourceWidth, height / sourceHeight);
