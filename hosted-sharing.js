@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { validStripPng } from './photo-storage.js';
 import { CHUNK_BYTES, MAX_PHOTO_BYTES, MAX_VIDEO_BYTES, SHARE_TTL_MS } from './sharing-config.js';
+import { verifyBoothPassword } from './booth-password.js';
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const metaKey = id => `cssbooth:shares:${id}:meta`;
@@ -63,7 +64,7 @@ function mediaKeys(id, meta) {
   return ['photo', 'video'].flatMap(kind => Array.from({ length: meta[kind].chunks }, (_, index) => chunkKey(id, kind, index)));
 }
 
-export function createShareHandler(command = redisCommand, now = Date.now) {
+export function createShareHandler(command = redisCommand, now = Date.now, { passwordMatches = verifyBoothPassword } = {}) {
   async function load(id) {
     if (!ID.test(id || '')) throw new ShareError(404, 'This QR link is invalid.');
     const raw = await command(['GET', metaKey(id)]);
@@ -79,6 +80,25 @@ export function createShareHandler(command = redisCommand, now = Date.now) {
         await command(['PING']); return json({ ready: true });
       }
       if (['POST', 'PUT'].includes(request.method) && !sameOrigin(request)) throw new ShareError(403, 'Invalid request origin.');
+      if (url.searchParams.get('login') === '1') {
+        if (request.method !== 'POST') throw new ShareError(405, 'Method not allowed.');
+        const input = await readJson(request);
+        const ip = request.headers.get('x-vercel-forwarded-for') || request.headers.get('x-forwarded-for') || 'unknown';
+        const count = await command(['EVAL', RATE_SCRIPT, 1, `cssbooth:login-rate:${hash(ip).slice(0, 24)}`]);
+        if (count > 10) throw new ShareError(429, 'Too many password attempts. Wait a minute and try again.');
+        if (typeof input?.password !== 'string' || !input.password.length || input.password.length > 128 || !await passwordMatches(input.password)) {
+          throw new ShareError(401, 'Incorrect password. Try again.');
+        }
+        const token = randomBytes(32).toString('hex');
+        await command(['SET', `cssbooth:access:${hash(token)}`, '1', 'PXAT', now() + 12 * 60 * 60 * 1000]);
+        return json({ token });
+      }
+      if (['POST', 'PUT'].includes(request.method)) {
+        const token = request.headers.get('x-booth-token') || '';
+        if (!/^[0-9a-f]{64}$/.test(token) || !await command(['GET', `cssbooth:access:${hash(token)}`])) {
+          throw new ShareError(401, 'Booth access expired. Reload the booth page and enter its password.');
+        }
+      }
       if (request.method === 'POST' && !url.searchParams.has('id')) {
         const input = await readJson(request);
         const photo = spec(input.photo, MAX_PHOTO_BYTES), video = spec(input.video, MAX_VIDEO_BYTES);

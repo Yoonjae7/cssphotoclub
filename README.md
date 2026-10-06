@@ -13,6 +13,12 @@ Import this repository into Vercel with the repository root as the Root Director
 
 The app needs internet access to share files. Vercel Blob, `BOOTH_UPLOAD_KEY`, and `BOOTH_SITE_ORIGIN` are no longer used. If a previous version uploaded files to Vercel Blob, remove those old files from that store separately.
 
+## Booth password
+
+Opening or reloading the booth page requires its operator password. The server checks a salted scrypt verifier, rate limits password attempts, and authorizes photo/video uploads with a random access token. The browser keeps that token in memory only; it does not remember the password or unlock state across page loads. An open tab can stay unlocked for up to twelve hours. QR download pages stay accessible to visitors without the booth password, with the existing five-minute expiry.
+
+This uses the connected Redis database and needs no additional environment variables. Only the password verifier is in server code; it is excluded from the published static assets.
+
 ## Permanent copies on the booth computer
 
 Before the event, expand **Booth archive** at the top of the site, press **Choose / enable archive folder**, select **Downloads**, and allow write access. The browser creates:

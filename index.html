@@ -10,7 +10,21 @@
     <a class="brand" href="/" aria-label="CSS Photo Club home"><span class="logo-crop"><img src="assets/css-logo.png" alt="Computer Science Society"></span><span>CSS PHOTO CLUB<small>UNIVERSITY OF NOTTINGHAM</small></span></a>
     <span class="fair-label">CLUBS & SOCIETIES FAIR <b>✳</b></span>
   </header>
-  <main>
+  <main id="access-view" class="access-view">
+    <section class="access-card" aria-labelledby="access-heading">
+      <p class="eyebrow">CSS PHOTO CLUB / BOOTH ACCESS</p>
+      <h1 id="access-heading">Unlock the<br><em>photo booth.</em></h1>
+      <p>Enter the booth password to get started.</p>
+      <form id="booth-login">
+        <label for="booth-password">Password</label>
+        <input id="booth-password" name="password" type="password" autocomplete="off" maxlength="128" required autofocus>
+        <button id="unlock-booth" class="button mint" type="submit">Open the booth <span>→</span></button>
+        <p id="login-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+    <noscript>Enable JavaScript to unlock the photo booth.</noscript>
+  </main>
+  <main id="booth-content" class="hidden">
     <nav class="journey" aria-label="Photo booth steps">
       <button id="step-camera" class="current" aria-current="step" data-step="1"><b>01</b><span>Take 8 photos</span></button><i>→</i>
       <button id="step-choose" data-step="2"><b>02</b><span>Pick your 4</span></button><i>→</i>
@@ -63,7 +77,7 @@
       </div>
     </section>
   </main>
-  <footer><span>COMPUTER SCIENCE SOCIETY</span><span>Scan for your PNG and MP4. Phone links last five minutes. No microphone.</span><span>WE DON'T CODE, WE BUILD ↗</span></footer>
-  <video id="camera" autoplay playsinline muted hidden></video><script type="module" src="app.js"></script>
+  <footer id="booth-footer" class="hidden"><span>COMPUTER SCIENCE SOCIETY</span><span>Scan for your PNG and MP4. Phone links last five minutes. No microphone.</span><span>WE DON'T CODE, WE BUILD ↗</span></footer>
+  <video id="camera" autoplay playsinline muted hidden></video><script type="module" src="booth-access.js"></script>
 </body>
 </html>

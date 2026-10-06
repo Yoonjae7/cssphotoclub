@@ -1,7 +1,8 @@
 import { CHUNK_BYTES, MAX_PHOTO_BYTES, MAX_VIDEO_BYTES } from './sharing-config.js';
+import { getBoothToken } from './booth-session.js';
 
 async function request(url, options) {
-  const response = await fetch(url, { ...options, cache: 'no-store', signal: AbortSignal.timeout(30_000) });
+  const response = await fetch(url, { ...options, headers: { ...options.headers, 'x-booth-token': getBoothToken() }, cache: 'no-store', signal: AbortSignal.timeout(30_000) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result.error || 'Could not prepare your phone link. Please try again.');
   return result;
