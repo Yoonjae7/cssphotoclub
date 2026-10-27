@@ -22,13 +22,13 @@ async function temporaryOutput(run) {
   }
 }
 
-test('Vercel publishes browser files and deploys the sharing function', async () => {
+test('Vercel publishes browser files with no server functions', async () => {
   const config = JSON.parse(await readFile(new URL('./vercel.json', import.meta.url), 'utf8'));
   assert.equal(config.framework, null);
   assert.equal(config.buildCommand, 'node build-static.mjs');
   assert.equal(config.outputDirectory, 'dist');
   assert.equal(config.builds, undefined);
-  assert.equal(config.functions['api/share.js'].maxDuration, 60);
+  assert.equal(config.functions, undefined);
 });
 
 test('static build contains every browser dependency, no photos or server code', async () => {

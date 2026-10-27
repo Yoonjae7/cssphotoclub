@@ -2,13 +2,11 @@ import { PhotoSession, PHOTO_COUNT, PICK_COUNT, POSE_MS, containFit } from './ph
 import { STRIP, FRAME_DESIGNS, DEFAULT_FRAME, frameDesign, drawStrip } from './photo-strip.js';
 import { canMakeVideo, makePhotoVideo } from './video-export.js';
 import { startSceneClip, MIN_CLIP_MS } from './clip-capture.js';
-import { shareFiles } from './phone-share.js';
 import { chooseArchive, restoreArchive, saveToArchive } from './local-archive.js';
-import qrcode from './vendor/qrcode.mjs';
 const $ = id => document.getElementById(id);
 const session = new PhotoSession();
 const canvas = $('scene'), ctx = canvas.getContext('2d', { alpha: false }), video = $('camera');
-const state = { clips: [], clipRecorder: null, mode: 'off', view: 'capture', design: DEFAULT_FRAME, stream: null, opening: false, timer: null, deadline: 0, generation: 0, previewRevision: 0, resultUrl: null, resultBlob: null, resultKey: null, videoBlob: null, videoPromise: null, photoArchived: false, videoArchived: false, shareUrl: null, shareBusy: false, shareRevision: 0, shareExpiryTimer: null, shareClock: null, autoShareTimer: null };
+const state = { clips: [], clipRecorder: null, mode: 'off', view: 'capture', design: DEFAULT_FRAME, stream: null, opening: false, timer: null, deadline: 0, generation: 0, previewRevision: 0, resultUrl: null, resultBlob: null, resultKey: null, videoBlob: null, videoPromise: null, photoArchived: false, videoArchived: false, exportRevision: 0 };
 const logos = { css: new Image(), nottingham: new Image() };
 logos.css.src = 'assets/css-logo.png'; logos.nottingham.src = 'assets/nottingham-logo.png';
 const assetsReady = Promise.all(Object.values(logos).map(image => image.decode().catch(() => {}))).then(() => document.fonts.ready);
@@ -47,7 +45,6 @@ function navigateStep(step) {
   else {
     $('strip-heading').innerHTML = step === 3 ? 'Your strip.<br><em>Your memories.</em>' : 'Save your<br><em>little keepsake.</em>';
     showView('result'); updateSaveControls(); updatePreview();
-    if (step === 4 && session.complete) schedulePhoneShare();
   }
 }
 function updateCapture() {
@@ -237,7 +234,6 @@ function chooseFrame(id) {
   const next = frameDesign(id).id;
   if (next === state.design) return;
   state.design = next; releaseResult(); updateSaveControls(); updatePreview();
-  if (session.step === 4 && session.complete) schedulePhoneShare();
 }
 function cycleDesign(direction) {
   const index = FRAME_DESIGNS.findIndex(design => design.id === state.design);
@@ -265,15 +261,10 @@ function updateSaveControls() {
   $('design-count').textContent = `${frameDesign(state.design).name} / ${FRAME_DESIGNS.length}`;
   $('previous-design-button').disabled = building; $('next-design-button').disabled = building;
   const previewOnly = session.step === 3;
-  $('phone-share').classList.toggle('hidden', previewOnly || !state.shareUrl);
-  $('share-status').classList.toggle('hidden', previewOnly);
   $('continue-save-button').classList.toggle('hidden', !previewOnly);
   for (const id of ['download-button', 'download-video-button']) { $(id).classList.toggle('hidden', previewOnly); $(id).disabled = !session.complete || building; }
   $('download-video-button').disabled ||= Boolean(state.videoPromise && !state.videoBlob);
   $('download-button').innerHTML = building ? 'Making your PNG…' : 'Download photo (PNG) <span>↓</span>';
-  $('share-button').classList.toggle('hidden', previewOnly);
-  $('share-button').disabled = !session.complete || building || state.shareBusy || Boolean(state.shareUrl);
-  $('share-button').innerHTML = state.shareBusy ? 'Preparing your phone QR…' : state.shareUrl ? 'Your phone QR is ready <span>✓</span>' : 'Create phone QR <span>▦</span>';
   $('save-help').textContent = session.complete ? 'All four are here. Change the design, then save it.' : `${session.selected.length} of 4 photos selected. Preview freely; choose four to save.`;
 }
 async function updatePreview() {
@@ -286,14 +277,10 @@ async function updatePreview() {
 }
 function releaseResult() {
   if (state.resultUrl) URL.revokeObjectURL(state.resultUrl);
-  clearTimeout(state.shareExpiryTimer); state.shareExpiryTimer = null;
-  clearInterval(state.shareClock); state.shareClock = null;
-  clearTimeout(state.autoShareTimer); state.autoShareTimer = null;
   state.resultUrl = null; state.resultBlob = null; state.resultKey = null; $('archive-status').textContent = '';
   state.videoBlob = null; state.videoPromise = null;
   state.photoArchived = false; state.videoArchived = false;
-  state.shareRevision++; state.shareUrl = null; state.shareBusy = false;
-  $('phone-share').classList.add('hidden'); $('share-status').textContent = '';
+  state.exportRevision++;
 }
 function exportKey() { return `${state.generation}:${state.design}:${session.selected.join(',')}`; }
 async function makeStrip() {
@@ -334,15 +321,13 @@ async function ensureVideo() {
   if (state.videoBlob) return state.videoBlob;
   if (state.videoPromise) return state.videoPromise;
   if (!canMakeVideo()) throw new Error('MP4 creation needs a current Chrome or Edge browser. Your photo download is still available.');
-  const generation = state.generation, revision = state.shareRevision, clips = session.selected.map(index => state.clips[index]), filename = archiveFilename('mp4');
+  const generation = state.generation, revision = state.exportRevision, clips = session.selected.map(index => state.clips[index]), filename = archiveFilename('mp4');
   const stripOptions = { logos, date: session.date, demo: state.mode === 'demo', design: state.design };
-  const active = () => generation === state.generation && revision === state.shareRevision;
+  const active = () => generation === state.generation && revision === state.exportRevision;
   const promise = (async () => {
     const recorded = await Promise.all(clips);
     if (!active()) throw new Error('Cancelled');
-    const blob = await makePhotoVideo(recorded, { ...stripOptions, active, progress: percent => {
-      if (active() && state.shareBusy) $('share-status').textContent = `Making your moving strip… ${percent}%`;
-    } });
+    const blob = await makePhotoVideo(recorded, { ...stripOptions, active });
     if (!active()) throw new Error('Cancelled');
     state.videoBlob = blob;
     try {
@@ -358,58 +343,6 @@ async function ensureVideo() {
   try { return await promise; }
   finally { if (state.videoPromise === promise) { state.videoPromise = null; updateSaveControls(); } }
 }
-function drawQr(url) {
-  const code = qrcode(0, 'M'); code.addData(url); code.make();
-  const modules = code.getModuleCount(), cell = 5, quiet = 4;
-  const qrCanvas = $('share-qr'); qrCanvas.width = qrCanvas.height = (modules + quiet * 2) * cell;
-  const qrContext = qrCanvas.getContext('2d');
-  qrContext.fillStyle = '#fff'; qrContext.fillRect(0, 0, qrCanvas.width, qrCanvas.height);
-  qrContext.fillStyle = '#303044';
-  for (let row = 0; row < modules; row++) for (let column = 0; column < modules; column++) {
-    if (code.isDark(row, column)) qrContext.fillRect((column + quiet) * cell, (row + quiet) * cell, cell, cell);
-  }
-}
-function schedulePhoneShare() {
-  clearTimeout(state.autoShareTimer);
-  state.autoShareTimer = setTimeout(() => {
-    state.autoShareTimer = null;
-    if (state.view !== 'result' || session.step !== 4 || !session.complete) return;
-    if (session.phase === 'building') schedulePhoneShare(); else createPhoneShare();
-  }, 600);
-}
-async function createPhoneShare() {
-  if (state.shareBusy || state.shareUrl || !session.complete) return;
-  state.shareBusy = true; updateSaveControls();
-  const result = await makeStrip();
-  if (!result) { state.shareBusy = false; updateSaveControls(); return; }
-  const generation = state.generation, revision = state.shareRevision;
-  const active = () => generation === state.generation && revision === state.shareRevision && state.view === 'result' && session.step === 4;
-  state.shareBusy = true; $('share-status').textContent = 'Making your MP4 and phone QR…'; updateSaveControls();
-  try {
-    const videoBlob = await ensureVideo();
-    if (!active()) return;
-    const share = await shareFiles(state.resultBlob, videoBlob, { active, progress: percent => { if (active()) $('share-status').textContent = `Preparing your phone QR… ${percent}%`; } });
-    if (!active()) return;
-    state.shareUrl = share.shareUrl;
-    drawQr(share.shareUrl);
-    $('share-link').href = share.shareUrl; $('share-link').textContent = 'Open your photo and MP4 downloads';
-    $('phone-share').classList.remove('hidden');
-    $('phone-share').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const deadline = Date.now() + share.remainingMs;
-    const countdown = () => {
-      const seconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-      $('share-expiry').textContent = `Available for ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-    };
-    state.shareClock = setInterval(countdown, 1000); countdown();
-    state.shareExpiryTimer = setTimeout(() => {
-      if (generation !== state.generation || revision !== state.shareRevision) return;
-      nextGroup(); notice('The five-minute QR expired. Your downloaded and archived copies are yours to keep.');
-    }, Math.max(1, share.remainingMs));
-    $('share-status').textContent = '✓ Scan to download your photo, MP4, or both.';
-  } catch (error) {
-    if (active()) $('share-status').textContent = error.message === 'Failed to fetch' ? 'Could not reach the website. Check the internet connection and retry your QR.' : error.message;
-  } finally { if (generation === state.generation && revision === state.shareRevision) { state.shareBusy = false; updateSaveControls(); } }
-}
 function nextGroup() {
   stopTimer(); state.generation++; releaseResult(); session.reset(); eraseActivePhotos(); state.design = DEFAULT_FRAME;
   showView('capture'); updateCapture(); notice();
@@ -424,14 +357,14 @@ async function downloadStrip() {
 async function downloadVideo() {
   const result = await makeStrip();
   if (!result) return;
-  const generation = state.generation, revision = state.shareRevision;
+  const generation = state.generation, revision = state.exportRevision;
   try {
     const blob = await ensureVideo();
-    if (generation !== state.generation || revision !== state.shareRevision) return;
+    if (generation !== state.generation || revision !== state.exportRevision) return;
     const url = URL.createObjectURL(blob), link = document.createElement('a');
     link.href = url; link.download = archiveFilename('mp4'); document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
-  } catch (error) { if (generation === state.generation && revision === state.shareRevision) notice(error.message, true); }
+  } catch (error) { if (generation === state.generation && revision === state.exportRevision) notice(error.message, true); }
 }
 $('camera-button').addEventListener('click', openCamera);
 $('demo-button').addEventListener('click', startDemo);
@@ -447,7 +380,6 @@ $('next-group-button').addEventListener('click', nextGroup);
 $('edit-selection-button').addEventListener('click', () => navigateStep(2));
 $('download-button').addEventListener('click', downloadStrip);
 $('download-video-button').addEventListener('click', downloadVideo);
-$('share-button').addEventListener('click', createPhoneShare);
 for (const button of document.querySelectorAll('.journey button')) button.addEventListener('click', () => navigateStep(Number(button.dataset.step)));
 document.addEventListener('keydown', event => {
   if (event.repeat || event.altKey || event.ctrlKey || event.metaKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
@@ -467,11 +399,11 @@ $('choose-archive').addEventListener('click', async () => {
   try {
     await chooseArchive();
     $('archive-folder-status').textContent = '✓ Automatic saves enabled: cssbooth/photo and cssbooth/video.';
-    const generation = state.generation, revision = state.shareRevision;
+    const generation = state.generation, revision = state.exportRevision;
     if (state.resultBlob) await archiveStrip(state.resultBlob, generation);
     if (state.videoBlob) {
       const saved = await saveToArchive('video', state.videoBlob, archiveFilename('mp4'));
-      if (saved && generation === state.generation && revision === state.shareRevision) {
+      if (saved && generation === state.generation && revision === state.exportRevision) {
         state.videoArchived = true;
         $('archive-status').textContent = state.photoArchived ? '✓ Photo and MP4 saved in cssbooth/photo and cssbooth/video.' : '✓ MP4 saved in cssbooth/video. Download the PNG to keep a photo copy.';
       }

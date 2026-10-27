@@ -10,21 +10,7 @@
     <a class="brand" href="/" aria-label="CSS Photo Club home"><span class="logo-crop"><img src="assets/css-logo.png" alt="Computer Science Society"></span><span>CSS PHOTO CLUB<small>UNIVERSITY OF NOTTINGHAM</small></span></a>
     <span class="fair-label">CLUBS & SOCIETIES FAIR <b>✳</b></span>
   </header>
-  <main id="access-view" class="access-view">
-    <section class="access-card" aria-labelledby="access-heading">
-      <p class="eyebrow">CSS PHOTO CLUB / BOOTH ACCESS</p>
-      <h1 id="access-heading">Unlock the<br><em>photo booth.</em></h1>
-      <p>Enter the booth password to get started.</p>
-      <form id="booth-login">
-        <label for="booth-password">Password</label>
-        <input id="booth-password" name="password" type="password" autocomplete="off" maxlength="128" required autofocus>
-        <button id="unlock-booth" class="button mint" type="submit">Open the booth <span>→</span></button>
-        <p id="login-status" role="status" aria-live="polite"></p>
-      </form>
-    </section>
-    <noscript>Enable JavaScript to unlock the photo booth.</noscript>
-  </main>
-  <main id="booth-content" class="hidden">
+  <main id="booth-content">
     <nav class="journey" aria-label="Photo booth steps">
       <button id="step-camera" class="current" aria-current="step" data-step="1"><b>01</b><span>Take 8 photos</span></button><i>→</i>
       <button id="step-choose" data-step="2"><b>02</b><span>Pick your 4</span></button><i>→</i>
@@ -63,21 +49,18 @@
       <div class="save-layout">
         <div class="strip-display"><canvas id="strip-preview" width="1000" height="3136" aria-label="Live preview of your four-photo strip"></canvas></div>
         <div class="save-copy" id="save-controls">
-          <div id="phone-share" class="phone-share hidden"><h3>Scan to save on your phone</h3><canvas id="share-qr" role="img" aria-label="QR code for your photo and video download page"></canvas><a id="share-link" target="_blank" rel="noopener noreferrer"></a><p id="share-expiry" role="timer"></p></div>
-          <p id="share-status" class="share-status" role="status"></p>
           <p class="eyebrow">WE DON'T CODE, WE BUILD</p><h2>Four moments.<br>Make them yours.</h2><p>Change the design right here.<br>Same photos. One big preview.</p>
           <div class="design-switcher"><button id="previous-design-button" class="design-arrow" aria-label="Previous design">←</button><span id="design-count" role="status">Design 1 / 3</span><button id="next-design-button" class="design-arrow" aria-label="Next design">→</button></div>
           <div id="design-options" class="design-options" role="group" aria-label="Photo strip designs"></div>
           <p id="save-help" class="save-help" role="status">Choose four photos to save your strip.</p>
           <button class="button purple hidden" id="continue-save-button">Continue to save <span>→</span></button>
           <button class="button mint" id="download-button" disabled>Download photo (PNG) <span>↓</span></button><button class="button purple" id="download-video-button" disabled>Download video (MP4) <span>↓</span></button>
-          <button class="button purple" id="share-button" disabled>Create phone QR <span>▦</span></button>
           <p id="archive-status" class="archive-status" role="status"></p><div class="result-links"><button class="text-button" id="edit-selection-button">← Change photos</button><button class="text-button" id="next-group-button">Next group →</button></div><small>HIGH-RES PNG · FOUR PHOTOS · ONE KEEPSAKE</small>
         </div>
       </div>
     </section>
   </main>
-  <footer id="booth-footer" class="hidden"><span>COMPUTER SCIENCE SOCIETY</span><span>Scan for your PNG and MP4. Phone links last five minutes. No microphone.</span><span>WE DON'T CODE, WE BUILD ↗</span></footer>
-  <video id="camera" autoplay playsinline muted hidden></video><script type="module" src="booth-access.js"></script>
+  <footer id="booth-footer"><span>COMPUTER SCIENCE SOCIETY</span><span>Download your PNG and MP4. No microphone.</span><span>WE DON'T CODE, WE BUILD ↗</span></footer>
+  <video id="camera" autoplay playsinline muted hidden></video><script type="module" src="app.js"></script>
 </body>
 </html>

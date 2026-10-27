@@ -4,7 +4,6 @@
   "installCommand": "",
   "buildCommand": "node build-static.mjs",
   "outputDirectory": "dist",
-  "functions": { "api/share.js": { "maxDuration": 60 } },
   "redirects": [
     { "source": "/favicon.ico", "destination": "/assets/favicon.svg", "permanent": false }
   ]
